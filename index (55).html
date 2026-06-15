@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>МережаЗв'язків • Теорія Графів</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="app">
+        <div class="sidebar glass-panel">
+            <div class="logo">
+                <i class="fas fa-project-diagram"></i>
+                <h1>МережаЗв'язків</h1>
+            </div>
+            
+            <nav class="menu">
+                <a href="#" onclick="switchTab(0)" class="active"><i class="fas fa-network-wired"></i> Граф</a>
+                <a href="#" onclick="switchTab(1)"><i class="fas fa-users"></i> Профілі</a>
+                <a href="#" onclick="switchTab(2)"><i class="fas fa-star"></i> Рекомендації</a>
+                <a href="#" onclick="switchTab(3)"><i class="fas fa-hashtag"></i> Інтереси</a>
+            </nav>
+            
+            <div class="stats">
+                <div class="stat-item glass-panel">
+                    <span class="stat-value" id="total-people">0</span>
+                    <span class="stat-label">Вершин</span>
+                </div>
+                <div class="stat-item glass-panel">
+                    <span class="stat-value" id="total-edges">0</span>
+                    <span class="stat-label">Зв'язків</span>
+                </div>
+            </div>
+            
+            <div class="search-box">
+                <input type="text" id="global-search" placeholder="Пошук людини (Enter)..." onkeyup="searchPeople(event)">
+            </div>
+        </div>
+        
+        <div class="main-content">
+            <header class="glass-panel">
+                <h2 id="page-title">Топологія Соціальної Мережі</h2>
+                <div class="header-actions">
+                    <button onclick="findHub()" class="btn outline-pink">
+                        <i class="fas fa-bullseye"></i> Знайти Хаб
+                    </button>
+                    <button onclick="randomizeConnections()" class="btn secondary">
+                        <i class="fas fa-random"></i> Рандомізувати
+                    </button>
+                    <button onclick="resetGraph()" class="btn danger">
+                        <i class="fas fa-trash-alt"></i> Очистити
+                    </button>
+                </div>
+            </header>
+            
+            <div id="tab-0" class="tab-content active">
+                <div class="graph-wrapper">
+                    <div class="graph-container glass-panel">
+                        <svg id="graph-svg" width="100%" height="100%"></svg>
+                        <div class="graph-legend glass-panel">
+                            <div><span class="node-dot"></span> Вершина (Людина)</div>
+                            <div><span class="edge-line"></span> Грань (Зв'язок)</div>
+                            <div style="margin-top: 8px; font-size: 11px; opacity: 0.7;">Товщина лінії = Сила зв'язку</div>
+                        </div>
+                    </div>
+                    
+                    <div id="floating-panel" class="floating-panel glass-panel hidden">
+                        <button class="close-btn" onclick="closeFloatingPanel()"><i class="fas fa-times"></i></button>
+                        <div class="profile-header">
+                            <div class="avatar" id="panel-avatar">А</div>
+                            <h3 id="panel-name">Ім'я</h3>
+                        </div>
+                        
+                        <div class="panel-section">
+                            <h4>Інтереси</h4>
+                            <div id="panel-interests" class="interests"></div>
+                        </div>
+
+                        <div class="panel-section">
+                            <h4>Рекомендований друг</h4>
+                            <div id="panel-recommendation" class="rec-mini-card"></div>
+                        </div>
+                        
+                        <div class="actions">
+                            <button onclick="highlightSimilarNodes()" class="btn primary full-width">
+                                <i class="fas fa-magic"></i> Знайти схожих (Анімація)
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div id="tab-1" class="tab-content">
+                <div class="profile-grid" id="profile-grid"></div>
+            </div>
+            
+            <div id="tab-2" class="tab-content">
+                <h2>Алгоритм Cosine Similarity</h2>
+                <p class="subtitle">Рекомендації на основі векторного збігу інтересів.</p>
+                <div id="recommendations-list" class="recommendations-list mt-4"></div>
+            </div>
+            
+            <div id="tab-3" class="tab-content">
+                <h2>Аналіз Інтересів</h2>
+                <div id="all-interests" class="interests-cloud mt-4"></div>
+            </div>
+        </div>
+        
+        <button onclick="toggleAddMode()" id="fab" class="fab" title="Режим додавання/видалення зв'язків">
+            <i class="fas fa-link"></i>
+        </button>
+
+        <div id="context-menu" class="context-menu glass-panel hidden">
+            <button id="delete-edge-btn" class="context-btn danger-text">
+                <i class="fas fa-unlink"></i> Розірвати зв'язок
+            </button>
+        </div>
+    </div>
+    
+    <div id="toast" class="toast glass-panel hidden"></div>
+
+    <script src="data.js"></script>
+    <script src="graph.js"></script>
+    <script src="ui.js"></script>
+</body>
+</html>
