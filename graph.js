@@ -12,7 +12,6 @@ function initGraph() {
     const width = container.clientWidth || 800;
     const height = container.clientHeight || 600;
 
-    // Force Simulation
     simulation = d3.forceSimulation(people)
         .force("link", d3.forceLink().id(d => d.id).distance(120).strength(0.5))
         .force("charge", d3.forceManyBody().strength(-800))
@@ -26,10 +25,9 @@ function initGraph() {
 
     simulation.on("tick", ticked);
     
-    // Примусове оновлення після ініціалізації
-    setTimeout(() => simulation.alpha(1).restart(), 10);
+    // Примусове перше оновлення
+    setTimeout(() => simulation.alpha(1).restart(), 50);
 
-    // Global click to close context menu
     d3.select("body").on("click", () => {
         document.getElementById("context-menu").classList.add("hidden");
     });
@@ -40,14 +38,10 @@ function updateGraphElements() {
         const sNode = people.find(p => p.id === source);
         const tNode = people.find(p => p.id === target);
         const sharedCount = sNode && tNode ? getSharedInterests(sNode.id, tNode.id).length : 0;
-        return { 
-            source: sNode, 
-            target: tNode, 
-            sharedCount: sharedCount 
-        };
+        return { source: sNode, target: tNode, sharedCount };
     });
 
-    // === Links update ===
+    // === LINKS ===
     let links = linksGroup.selectAll("line")
         .data(linkData, d => `${d.source.id}-${d.target.id}`);
 
@@ -60,9 +54,9 @@ function updateGraphElements() {
         .attr("stroke-opacity", 0.6)
         .on("contextmenu", handleContextMenu);
 
-    links = linksEnter.merge(links);
+    links = linksEnter.merge(links);   // ← важливо
 
-    // === Nodes update ===
+    // === NODES ===
     let nodes = nodesGroup.selectAll("g.node")
         .data(people, d => d.id);
 
@@ -91,9 +85,9 @@ function updateGraphElements() {
         .style("pointer-events", "none")
         .text(d => d.name.split(" ")[0]);
 
-    nodes = nodesEnter.merge(nodes);
+    nodes = nodesEnter.merge(nodes);   // ← важливо
 
-    // Update simulation
+    // Оновлення симуляції
     simulation.nodes(people);
     simulation.force("link").links(linkData);
     simulation.alpha(0.3).restart();
@@ -102,14 +96,14 @@ function updateGraphElements() {
 }
 
 function ticked() {
-    // Оновлення ліній (дуже важливо робити першими)
+    // Лінії
     linksGroup.selectAll("line")
         .attr("x1", d => d.source.x)
         .attr("y1", d => d.source.y)
         .attr("x2", d => d.target.x)
         .attr("y2", d => d.target.y);
 
-    // Оновлення вершин
+    // Вершини
     nodesGroup.selectAll("g.node")
         .attr("transform", d => `translate(${d.x},${d.y})`);
 }
@@ -159,24 +153,18 @@ function handleContextMenu(event, d) {
     };
 }
 
-// Search Animation
 function animateSearch(targetNodeId) {
     const node = people.find(p => p.id === targetNodeId);
     if (!node) return;
-    
-    currentHighlightedNode = node;
     
     nodesGroup.selectAll(".node").classed("dimmed", true).classed("highlighted", false);
     linksGroup.selectAll(".link").classed("dimmed", true).classed("highlighted", false);
     
     nodesGroup.selectAll(".node").filter(d => d.id === targetNodeId)
-        .classed("dimmed", false)
-        .classed("highlighted", true)
+        .classed("dimmed", false).classed("highlighted", true)
         .select("circle")
-        .transition().duration(500)
-        .attr("r", 30)
-        .transition().duration(500)
-        .attr("r", 22);
+        .transition().duration(500).attr("r", 30)
+        .transition().duration(500).attr("r", 22);
         
     const recs = getRecommendations(targetNodeId).slice(0, 3);
     const recIds = recs.map(r => r.id);
@@ -189,20 +177,17 @@ function animateSearch(targetNodeId) {
 }
 
 function resetHighlights() {
-    currentHighlightedNode = null;
     nodesGroup.selectAll(".node")
-        .classed("dimmed", false)
-        .classed("highlighted", false)
+        .classed("dimmed", false).classed("highlighted", false)
         .select("circle")
         .attr("stroke", "var(--accent-pink)")
         .attr("r", 22);
         
     linksGroup.selectAll(".link")
-        .classed("dimmed", false)
-        .classed("highlighted", false);
+        .classed("dimmed", false).classed("highlighted", false);
 }
 
-// Drag functionality
+// Drag
 function dragstarted(event) {
     if (!event.active) simulation.alphaTarget(0.3).restart();
     event.subject.fx = event.subject.x;
