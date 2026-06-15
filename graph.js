@@ -12,7 +12,7 @@ function initGraph() {
     const width = container.clientWidth || 800;
     const height = container.clientHeight || 600;
 
-    // Force Simulation
+    // Force Simulation with topology analysis in mind
     simulation = d3.forceSimulation(people)
         .force("link", d3.forceLink().id(d => d.id).distance(120).strength(0.5))
         .force("charge", d3.forceManyBody().strength(-800))
@@ -49,6 +49,7 @@ function updateGraphElements() {
     const linksEnter = links.enter().append("line")
         .attr("class", "link")
         .attr("stroke", "var(--edge-color)")
+        // Feature: Weight dependent on shared interests
         .attr("stroke-width", d => 1.5 + (d.sharedCount * 1.5))
         .attr("stroke-opacity", 0.6)
         .on("contextmenu", handleContextMenu);
@@ -100,7 +101,7 @@ function ticked() {
         .attr("x2", d => d.target.x)
         .attr("y2", d => d.target.y);
 
-    nodesGroup.selectAll("g.node")
+    nodesGroup.selectAll(".node")
         .attr("transform", d => `translate(${d.x},${d.y})`);
 }
 
@@ -149,43 +150,7 @@ function handleContextMenu(event, d) {
     };
 }
 
-// ==================== ИСПРАВЛЕННЫЕ DRAG ФУНКЦИИ ====================
-
-function dragstarted(event) {
-    if (!event.active) simulation.alphaTarget(0.3).restart();
-    
-    event.subject.fx = event.subject.x;
-    event.subject.fy = event.subject.y;
-    
-    // Визуальная обратная связь
-    d3.select(this).select("circle")
-        .attr("stroke", "#fff")
-        .attr("stroke-width", 4);
-}
-
-function dragged(event) {
-    event.subject.fx = event.x;
-    event.subject.fy = event.y;
-
-    // Немедленное обновление позиции — убирает лаг между кругом и текстом
-    d3.select(this)
-        .attr("transform", `translate(${event.x},${event.y})`);
-}
-
-function dragended(event) {
-    if (!event.active) simulation.alphaTarget(0);
-    
-    event.subject.fx = null;
-    event.subject.fy = null;
-    
-    // Возвращаем обычный стиль
-    d3.select(this).select("circle")
-        .attr("stroke", "var(--accent-pink)")
-        .attr("stroke-width", 2);
-}
-
-// ==================== АНИМАЦИЯ ПОИСКА ====================
-
+// Search Animation Feature
 function animateSearch(targetNodeId) {
     const node = people.find(p => p.id === targetNodeId);
     if (!node) return;
@@ -206,7 +171,7 @@ function animateSearch(targetNodeId) {
         .transition().duration(500)
         .attr("r", 22);
         
-    // Highlight recommendations
+    // Find recommendations and highlight them slightly
     const recs = getRecommendations(targetNodeId).slice(0, 3);
     const recIds = recs.map(r => r.id);
     
@@ -229,4 +194,20 @@ function resetHighlights() {
     linksGroup.selectAll(".link")
         .classed("dimmed", false)
         .classed("highlighted", false);
+}
+
+// Drag functionality
+function dragstarted(event) {
+    if (!event.active) simulation.alphaTarget(0.3).restart();
+    event.subject.fx = event.subject.x;
+    event.subject.fy = event.subject.y;
+}
+function dragged(event) {
+    event.subject.fx = event.x;
+    event.subject.fy = event.y;
+}
+function dragended(event) {
+    if (!event.active) simulation.alphaTarget(0);
+    event.subject.fx = null;
+    event.subject.fy = null;
 }
