@@ -30,82 +30,94 @@ function generatePeople(count = 25) {
             interests: interests,
             x: Math.random() * 800,
             y: Math.random() * 600,
-            gnn_embedding: [] // Хранилище признаков GNN
+            z: (Math.random() - 0.5) * 300 // 3D координата для AR простору
         });
     }
     
-    // Генерируем связи
     edges = [];
     for (let i = 0; i < 50; i++) {
         let a = Math.floor(Math.random() * count);
         let b = Math.floor(Math.random() * count);
-        while (b === a) b = Math.floor(Math.random() * count);
-        
-        if (!edges.some(e => (e[0] === a && e[1] === b) || (e[0] === b && e[1] === a))) {
-            edges.push([a, b]);
-        }
+        if (a !== b) addEdge(a, b);
     }
-    // Запускаем первичное обучение нейросети GNN
+    
     computeGNNEmbeddings();
 }
 
-// --- КРИТЕРИЙ ML: ПОЛНОЦЕННАЯ СЕТЬ GRAPH CONVOLUTIONAL NETWORK (GCN) НА JS ---
+// === МАШИННЕ НАВЧАННЯ: GRAPH CONVOLUTIONAL NETWORK (GCN) ===
 function computeGNNEmbeddings() {
-    if (people.length === 0) return;
+    const N = people.length;
+    const M = interestPool.length;
+    if (N === 0) return;
 
-    // Шаг 1: Инициализация фич узлов (One-Hot кодирование интересов в компактное скрытое пространство весов 8-D)
-    people.forEach(p => {
-        p.gnn_embedding = new Array(8).fill(0).map((_, idx) => {
-            let coreScore = 0;
-            p.interests.forEach(interest => {
-                coreScore += interestPool.indexOf(interest) * (idx + 1);
-            });
-            return Math.sin(coreScore) * 0.5 + 0.5; // Нормализованный базовый вектор структуры
+    // 1. Створення матриці ознак X (One-Hot encoding інтересів)
+    let X = Array(N).fill(0).map(() => Array(M).fill(0));
+    people.forEach((p, idx) => {
+        p.interests.forEach(interest => {
+            const intIdx = interestPool.indexOf(interest);
+            if (intIdx !== -1) X[idx][intIdx] = 1;
         });
     });
 
-    // Шаг 2: Реализация 2-х слоев Message Passing (Graph Convolution Convolutional Layers)
-    // H^(l+1) = D^(-0.5) * A_tilde * D^(-0.5) * H^(l) * W
-    const numLayers = 2;
-    for (let layer = 0; layer < numLayers; layer++) {
-        // Клонируем эмбеддинги для синхронного обновления слоя
-        let nextLayerEmbeddings = people.map(p => [...p.gnn_embedding]);
+    // 2. Побудова матриці суміжності з урахуванням self-loops (A_hat = A + I)
+    let A_hat = Array(N).fill(0).map(() => Array(N).fill(0));
+    for (let i = 0; i < N; i++) A_hat[i][i] = 1; // Self-loop
+    edges.forEach(([u, v]) => {
+        if (u < N && v < N) {
+            A_hat[u][v] = 1;
+            A_hat[v][u] = 1;
+        }
+    });
 
-        // Рассчитываем степени вершин (Degrees)
-        const degrees = new Array(people.length).fill(1); // Плюс 1 для Self-loop (петли к себе)
-        edges.forEach(([u, v]) => {
-            degrees[u]++;
-            degrees[v]++;
-        });
-
-        // Распространение признаков (Aggregation Step)
-        edges.forEach(([u, v]) => {
-            const norm = 1.0 / Math.sqrt(degrees[u] * degrees[v]);
-            for (let i = 0; i < 8; i++) {
-                nextLayerEmbeddings[u][i] += people[v].gnn_embedding[i] * norm;
-                nextLayerEmbeddings[v][i] += people[u].gnn_embedding[i] * norm;
-            }
-        });
-
-        // Линейная трансформация весов (W-матрица имитации) + Нелинейная функция активации (ReLU)
-        people.forEach((p, idx) => {
-            p.gnn_embedding = nextLayerEmbeddings[idx].map(val => {
-                let transformed = val * 0.85; // Имитация весового скаляра слоя
-                return transformed > 0 ? Math.min(transformed, 1.0) : 0; // ReLU активация
-            });
-        });
+    // 3. Розрахунок матриці ступенів D_hat та симетричне нормування (D^-0.5 * A_hat * D^-0.5)
+    let degrees = Array(N).fill(0);
+    for (let i = 0; i < N; i++) {
+        for (let j = 0; j < N; j++) degrees[i] += A_hat[i][j];
     }
+
+    let A_norm = Array(N).fill(0).map(() => Array(N).fill(0));
+    for (let i = 0; i < N; i++) {
+        for (let j = 0; j < N; j++) {
+            if (degrees[i] > 0 && degrees[j] > 0) {
+                A_norm[i][j] = A_hat[i][j] / Math.sqrt(degrees[i] * degrees[j]);
+            }
+        }
+    }
+
+    // 4. Прохід шару 1 (Message Passing): H1 = ReLU(A_norm * X * W1)
+    // Фіксовані ваги для стабільності демонстрації (розмірність M x 8)
+    let W1 = Array(M).fill(0).map((_, i) => Array(8).fill(0).map((_, j) => Math.sin(i + j * 0.5)));
+    let H1 = Array(N).fill(0).map(() => Array(8).fill(0));
+    
+    // Множення A_norm * X
+    let AX = Array(N).fill(0).map(() => Array(M).fill(0));
+    for (let i = 0; i < N; i++) {
+        for (let j = 0; j < M; j++) {
+            for (let k = 0; k < N; k++) AX[i][j] += A_norm[i][k] * X[k][j];
+        }
+    }
+    // Множення на W1 та активація ReLU
+    for (let i = 0; i < N; i++) {
+        for (let j = 0; j < 8; j++) {
+            let sum = 0;
+            for (let k = 0; k < M; k++) sum += AX[i][k] * W1[k][j];
+            H1[i][j] = Math.max(0, sum); // ReLU
+        }
+    }
+
+    // Зберігаємо отримані ембеддінги графа у об'єкти вершин
+    people.forEach((p, idx) => {
+        p.gnnEmbedding = H1[idx];
+    });
 }
 
-// Косинусное сходство между двумя векторами обученных латентных эмбеддингов GNN
-function calculateGNNCosineSimilarity(p1, p2) {
-    let dotProduct = 0;
-    let normA = 0;
-    let normB = 0;
-    for (let i = 0; i < 8; i++) {
-        dotProduct += p1.gnn_embedding[i] * p2.gnn_embedding[i];
-        normA += p1.gnn_embedding[i] * p1.gnn_embedding[i];
-        normB += p2.gnn_embedding[i] * p2.gnn_embedding[i];
+function calculateCosineSimilarity(p1, p2) {
+    if (!p1.gnnEmbedding || !p2.gnnEmbedding) return 0;
+    let dotProduct = 0, normA = 0, normB = 0;
+    for (let i = 0; i < p1.gnnEmbedding.length; i++) {
+        dotProduct += p1.gnnEmbedding[i] * p2.gnnEmbedding[i];
+        normA += p1.gnnEmbedding[i] * p1.gnnEmbedding[i];
+        normB += p2.gnnEmbedding[i] * p2.gnnEmbedding[i];
     }
     if (normA === 0 || normB === 0) return 0;
     return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
@@ -119,20 +131,33 @@ function getSharedInterests(id1, id2) {
 }
 
 function getRecommendations(personId) {
-    // Обновляем структуру GNN перед вычислением рекомендаций
-    computeGNNEmbeddings();
     const person = people.find(p => p.id === personId);
     if (!person) return [];
-
+    
     return people
-        .filter(p => p.id !== personId) 
-        .filter(p => !edges.some(e => (e[0] === personId && e[1] === p.id) || (e[0] === p.id && e[1] === personId))) 
+        .filter(p => p.id !== personId)
+        .filter(p => !edges.some(e => (e[0] === personId && e[1] === p.id) || (e[0] === p.id && e[1] === personId)))
         .map(p => {
-            const sim = calculateGNNCosineSimilarity(person, p);
+            const sim = calculateCosineSimilarity(person, p);
             return { ...p, similarity: sim, shared: getSharedInterests(personId, p.id) };
         })
-        .filter(p => p.similarity > 0.05) 
+        .filter(p => p.similarity > 0)
         .sort((a, b) => b.similarity - a.similarity);
+}
+
+function addCustomPerson(name, selectedInterests) {
+    const newId = people.length > 0 ? Math.max(...people.map(p => p.id)) + 1 : 0;
+    const newPerson = {
+        id: newId,
+        name: name,
+        interests: selectedInterests,
+        x: 200 + Math.random() * 400,
+        y: 200 + Math.random() * 200,
+        z: (Math.random() - 0.5) * 200
+    };
+    people.push(newPerson);
+    computeGNNEmbeddings();
+    return newPerson;
 }
 
 function addEdge(id1, id2) {
@@ -140,7 +165,7 @@ function addEdge(id1, id2) {
     const b = Math.max(id1, id2);
     if (!edges.some(e => e[0] === a && e[1] === b) && a !== b) {
         edges.push([a, b]);
-        computeGNNEmbeddings(); // Пересчитываем веса GNN при изменении топологии
+        computeGNNEmbeddings(); // Перераховуємо ваги графа після зміни топології
         return true;
     }
     return false;
@@ -151,72 +176,6 @@ function removeEdge(id1, id2) {
     const b = Math.max(id1, id2);
     const initialLength = edges.length;
     edges = edges.filter(e => !(e[0] === a && e[1] === b));
-    computeGNNEmbeddings(); // Пересчитываем веса GNN
+    computeGNNEmbeddings();
     return edges.length < initialLength;
-}
-
-// --- КРИТЕРИЙ: ТРАНСПОРТНЫЕ СИСТЕМЫ И ЛОГІСТИКА (Алгоритм Дейкстры) ---
-function findShortestLogisticsRoute(startId, endId) {
-    const distances = {};
-    const previous = {};
-    const queue = [];
-
-    people.forEach(p => {
-        distances[p.id] = Infinity;
-        previous[p.id] = null;
-        queue.push(p.id);
-    });
-    distances[startId] = 0;
-
-    while (queue.length > 0) {
-        // Сортируем очередь по приоритету расстояния
-        queue.sort((a, b) => distances[a] - distances[b]);
-        const current = queue.shift();
-
-        if (current === endId) break;
-        if (distances[current] === Infinity) break;
-
-        // Поиск смежных транспортных путей
-        const neighbors = [];
-        edges.forEach(([u, v]) => {
-            if (u === current) neighbors.push(v);
-            if (v === current) neighbors.push(u);
-        });
-
-        neighbors.forEach(neighbor => {
-            if (!queue.includes(neighbor)) return;
-            // Длина каждого ребра в сети принята за 1 единицу
-            const alt = distances[current] + 1; 
-            if (alt < distances[neighbor]) {
-                distances[neighbor] = alt;
-                previous[neighbor] = current;
-            }
-        });
-    }
-
-    const path = [];
-    let curr = endId;
-    while (curr !== null) {
-        path.unshift(curr);
-        curr = previous[curr];
-    }
-    return path[0] === startId ? { path, distance: distances[endId] } : null;
-}
-
-// --- КРИТЕРИЙ: АНАЛИЗ ТОПОЛОГИИ (Метрика Closeness Centrality) ---
-function calculateClosenessCentrality(personId) {
-    let totalDistance = 0;
-    let reachableNodes = 0;
-
-    people.forEach(p => {
-        if (p.id === personId) return;
-        const route = findShortestLogisticsRoute(personId, p.id);
-        if (route) {
-            totalDistance += route.distance;
-            reachableNodes++;
-        }
-    });
-
-    // Формула: C(u) = (N - 1) / Sum(d(u, v))
-    return totalDistance > 0 ? (reachableNodes / totalDistance) : 0;
 }
