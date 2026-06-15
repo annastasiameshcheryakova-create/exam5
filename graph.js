@@ -95,19 +95,92 @@ function updateGraphElements() {
     updateStats();
 }
 
+// graph.js
+
+// ... (початок файлу без змін до функції ticked)
+
 function ticked() {
-    // Лінії
-    linksGroup.selectAll("line")
+    // 1. Оновлюємо координати ліній зв'язків
+    // Ми звертаємось до даних об'єктів, які D3 автоматично оновлює під час симуляції
+    linksGroup.selectAll(".link")
         .attr("x1", d => d.source.x)
         .attr("y1", d => d.source.y)
         .attr("x2", d => d.target.x)
         .attr("y2", d => d.target.y);
 
-    // Вершини
+    // 2. Оновлюємо позицію груп (коло + текст) через transform
+    // Це забезпечує, що текст ніколи не "відстає" від кола
     nodesGroup.selectAll("g.node")
         .attr("transform", d => `translate(${d.x},${d.y})`);
 }
 
+function updateGraphElements() {
+    // ВАЖЛИВО: Перетворюємо масив зв'язків на об'єкти з посиланнями на вузли
+    const linkData = edges.map(([sourceId, targetId]) => {
+        const sNode = people.find(p => p.id === sourceId);
+        const tNode = people.find(p => p.id === targetId);
+        const sharedCount = sNode && tNode ? getSharedInterests(sNode.id, tNode.id).length : 0;
+        return { source: sNode, target: tNode, sharedCount: sharedCount };
+    });
+
+    // Оновлення ліній
+    const links = linksGroup.selectAll("line.link")
+        .data(linkData, d => `${d.source.id}-${d.target.id}`);
+
+    links.exit().remove();
+
+    const linksEnter = links.enter().append("line")
+        .attr("class", "link")
+        .attr("stroke", "var(--edge-color)")
+        .attr("stroke-width", d => 1.5 + (d.sharedCount * 1.5))
+        .on("contextmenu", handleContextMenu);
+
+    linksEnter.merge(links);
+
+    // Оновлення вузлів
+    const nodes = nodesGroup.selectAll("g.node")
+        .data(people, d => d.id);
+
+    nodes.exit().remove();
+
+    const nodesEnter = nodes.enter().append("g")
+        .attr("class", "node")
+        .call(d3.drag()
+            .on("start", dragstarted)
+            .on("drag", dragged)
+            .on("end", dragended))
+        .on("click", handleNodeClick);
+
+    // Додаємо коло
+    nodesEnter.append("circle")
+        .attr("r", 22)
+        .attr("fill", "var(--glass-bg)")
+        .attr("stroke", "var(--accent-pink)")
+        .attr("stroke-width", 2);
+
+    // Додаємо текст (він всередині групи g, тому рухається синхронно з колом)
+    nodesEnter.append("text")
+        .attr("text-anchor", "middle")
+        .attr("dy", 5)
+        .attr("fill", "var(--text-main)")
+        .style("font-size", "11px")
+        .style("font-weight", "600")
+        .style("pointer-events", "none")
+        .text(d => d.name.split(" ")[0]);
+
+    const allNodes = nodesEnter.merge(nodes);
+
+    // Оновлюємо симуляцію
+    simulation.nodes(people);
+    simulation.force("link").links(linkData);
+    
+    // Перезапускаємо симуляцію для застосування змін
+    simulation.alpha(0.3).restart();
+    
+    updateStats();
+}
+
+// ... (решта функцій файлу)
 function handleNodeClick(event, d) {
     event.stopPropagation();
     
