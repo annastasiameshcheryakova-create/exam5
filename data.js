@@ -14,7 +14,7 @@ const names = [
     "Анастасія", "Максим", "Софія", "Дмитро", "Ольга", "Іван", "Марія", 
     "Артем", "Катерина", "Олександр", "Поліна", "Віктор", "Анна", 
     "Єгор", "Вікторія", "Тимофій", "Єлизавета", "Михайло", "Дарина",
-    "Роман", "Аліна", "Кирило", "Вероніка", "Богдан", "Юлія", "Павло",
+    "Roman", "Аліна", "Кирило", "Вероніка", "Богдан", "Юлія", "Павло",
     "Христина", "Ігор"
 ];
 
@@ -85,7 +85,6 @@ function computeGNNEmbeddings() {
     }
 
     // 4. Прохід шару 1 (Message Passing): H1 = ReLU(A_norm * X * W1)
-    // Фіксовані ваги для стабільності демонстрації (розмірність M x 8)
     let W1 = Array(M).fill(0).map((_, i) => Array(8).fill(0).map((_, j) => Math.sin(i + j * 0.5)));
     let H1 = Array(N).fill(0).map(() => Array(8).fill(0));
     
@@ -105,7 +104,6 @@ function computeGNNEmbeddings() {
         }
     }
 
-    // Зберігаємо отримані ембеддінги графа у об'єкти вершин
     people.forEach((p, idx) => {
         p.gnnEmbedding = H1[idx];
     });
@@ -130,19 +128,35 @@ function getSharedInterests(id1, id2) {
     return p1.interests.filter(i => p2.interests.includes(i));
 }
 
+// ВИПРАВЛЕНА СИСТЕМА ПІДБОРУ: Більше ніякого рандому, розрахунок йде за реальними інтересами
 function getRecommendations(personId) {
     const person = people.find(p => p.id === personId);
     if (!person) return [];
     
     return people
         .filter(p => p.id !== personId)
+        // Виключаємо тих, з ким зв'язок уже встановлено
         .filter(p => !edges.some(e => (e[0] === personId && e[1] === p.id) || (e[0] === p.id && e[1] === personId)))
         .map(p => {
-            const sim = calculateCosineSimilarity(person, p);
-            return { ...p, similarity: sim, shared: getSharedInterests(personId, p.id) };
+            const shared = getSharedInterests(personId, p.id);
+            const gnnSim = calculateCosineSimilarity(person, p);
+            
+            // Розраховуємо точний відсоток збігу інтересів (пропорція перетину)
+            const directInterestSim = shared.length / Math.max(1, person.interests.length);
+            
+            // Робимо гібридну оцінку, де 80% — це чисті спільні інтереси, а 20% — це топологічна вага GNN
+            const finalScore = shared.length > 0 ? (0.8 * directInterestSim + 0.2 * gnnSim) : 0;
+            
+            return { 
+                ...p, 
+                similarity: Math.min(1, Math.max(0, finalScore)), 
+                shared: shared 
+            };
         })
-        .filter(p => p.similarity > 0)
-        .sort((a, b) => b.similarity - a.similarity);
+        // ЖОРСТКИЙ ФІЛЬТР: якщо немає жодного спільного інтересу — людина не підходить для рекомендації
+        .filter(p => p.shared.length > 0)
+        // СОРТУВАННЯ: Спочатку ті, у кого найбільша кількість спільних інтересів
+        .sort((a, b) => b.shared.length - a.shared.length || b.similarity - a.similarity);
 }
 
 function addCustomPerson(name, selectedInterests) {
@@ -165,7 +179,7 @@ function addEdge(id1, id2) {
     const b = Math.max(id1, id2);
     if (!edges.some(e => e[0] === a && e[1] === b) && a !== b) {
         edges.push([a, b]);
-        computeGNNEmbeddings(); // Перераховуємо ваги графа після зміни топології
+        computeGNNEmbeddings(); 
         return true;
     }
     return false;
