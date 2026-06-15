@@ -271,19 +271,30 @@ function showToast(message) {
 }
 
 // =========================================================
-// ДОПОВНЕНА РЕАЛЬНІСТЬ (AR) З ПІДТРИМКОЮ WEBXR
+// ОБ'ЄДНАНИЙ XR-МОДУЛЬ: ПОДВІЙНА ПІДТРИМКА AR ТА VR (WEBXR)
 // =========================================================
-let xrScene, xrCamera, xrRenderer, xrContainer;
+let xrScene, xrCamera, xrRenderer, xrContainer, activeXRSession = null;
 let meshes = {};
-let graphGroup; // Використовуємо групу для масштабування в AR
+let graphGroup;
+let currentModeType = "immersive-ar"; // за замовчуванням AR
 
 function initARMode() {
     if ('xr' in navigator) {
-        navigator.xr.isSessionSupported('immersive-ar').then((supported) => {
-            if (supported) {
+        // Перевіряємо спочатку AR режим
+        navigator.xr.isSessionSupported('immersive-ar').then((arSupported) => {
+            if (arSupported) {
+                currentModeType = "immersive-ar";
                 startTrueWebXR();
             } else {
-                startVideoAR(); // Fallback для ПК / старих браузерів
+                // Якщо AR немає, перевіряємо VR режим
+                navigator.xr.isSessionSupported('immersive-vr').then((vrSupported) => {
+                    if (vrSupported) {
+                        currentModeType = "immersive-vr";
+                        startTrueWebXR();
+                    } else {
+                        startVideoAR(); // Настільний fallback
+                    }
+                });
             }
         });
     } else {
@@ -291,66 +302,91 @@ function initARMode() {
     }
 }
 
-// СПРАВЖНІЙ WEBXR (ДЛЯ ТЕЛЕФОНІВ)
+// НАДБУДОВА СПРАВЖНЬОГО WEBXR (З ПЕРЕМИКАННЯМ AR <=> VR)
 function startTrueWebXR() {
-    showToast("Запуск WebXR AR...");
+    showToast(`Запуск WebXR у режимі: ${currentModeType === 'immersive-ar' ? 'AR (Камера)' : 'VR (360° Простір)'}`);
 
-    xrContainer = document.createElement("div");
-    xrContainer.id = "xr-overlay";
-    xrContainer.style.position = "fixed";
-    xrContainer.style.top = "0";
-    xrContainer.style.left = "0";
-    xrContainer.style.width = "100vw";
-    xrContainer.style.height = "100vh";
-    xrContainer.style.zIndex = "999";
-    xrContainer.style.pointerEvents = "none"; // Щоб кліки проходили до WebXR канвасу
-    document.body.appendChild(xrContainer);
+    // Перевіряємо, чи існує контейнер, якщо ні - створюємо
+    xrContainer = document.getElementById("xr-overlay");
+    if (!xrContainer) {
+        xrContainer = document.createElement("div");
+        xrContainer.id = "xr-overlay";
+        xrContainer.style.position = "fixed";
+        xrContainer.style.top = "0"; xrContainer.style.left = "0";
+        xrContainer.style.width = "100vw"; xrContainer.style.height = "100vh";
+        xrContainer.style.zIndex = "999"; xrContainer.style.pointerEvents = "none";
+        document.body.appendChild(xrContainer);
+    }
 
-    // Панель керування (DOM Overlay для WebXR)
-    let info = document.createElement("div");
-    info.style.position = "absolute";
-    info.style.bottom = "20px";
-    info.style.left = "20px";
-    info.style.background = "rgba(0,0,0,0.8)";
-    info.style.padding = "15px";
-    info.style.borderRadius = "10px";
-    info.style.pointerEvents = "auto";
-    info.innerHTML = `
-        <h4 style="color:var(--accent-pink)">WebXR Controller</h4>
-        <p style="margin-top:4px; font-size:12px;">Тапніть по екрану, щоб вибрати вершину</p>
-        <div style="margin-top:8px; display:flex; gap:5px; flex-wrap:wrap;">
-           <button onclick="window.toggleARAddMode()" class="btn outline-pink" id="ar-add-btn" style="padding:6px; font-size:11px;">Режим зв'язків: ВИМК</button>
-           <button id="exit-ar-btn" class="btn danger" style="padding:6px; font-size:11px;">Вийти</button>
+    // Рендеримо пульт керування у DOM Overlay
+    xrContainer.innerHTML = `
+        <div style="position: absolute; bottom: 20px; left: 20px; background: rgba(10,8,18,0.9); padding: 15px; border-radius: 12px; pointer-events: auto; border: 1px solid var(--glass-border); font-family:'Inter',sans-serif;">
+            <h4 style="color:var(--accent-pink); margin-bottom: 2px;"><i class="fas fa-vr-cardboard"></i> WebXR Матриця</h4>
+            <p style="font-size: 11px; color: var(--text-muted); margin-bottom: 8px;">Режим: ${currentModeType === 'immersive-ar' ? 'Доповнена реальність (AR)' : 'Віртуальний простір (VR)'}</p>
+            <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+               <button onclick="window.toggleARAddMode()" class="btn outline-pink" id="ar-add-btn" style="padding: 5px 10px; font-size: 11px; height: auto;">Зв'язки: ВИМК</button>
+               <button onclick="window.switchXRMode()" class="btn secondary" style="padding: 5px 10px; font-size: 11px; height: auto; background: rgba(255,255,255,0.05); color: #fff;">
+                    <i class="fas fa-sync-alt"></i> Увімкнути ${currentModeType === 'immersive-ar' ? 'VR' : 'AR'}
+               </button>
+               <button id="exit-ar-btn" class="btn danger" style="padding: 5px 10px; font-size: 11px; height: auto;">Вийти</button>
+            </div>
         </div>
     `;
-    xrContainer.appendChild(info);
 
     window.toggleARAddMode = function() {
         isAddMode = !isAddMode;
         selectedForConnection = null;
         const btn = document.getElementById('ar-add-btn');
-        btn.style.background = isAddMode ? "var(--accent-pink)" : "transparent";
-        btn.style.color = isAddMode ? "white" : "var(--accent-pink)";
-        btn.textContent = isAddMode ? "Режим зв'язків: УВІМК" : "Режим зв'язків: ВИМК";
-        showToast(isAddMode ? "Режим зв'язків: Оберіть 2 вершини" : "Режим перегляду");
+        if(btn) {
+            btn.style.background = isAddMode ? "var(--accent-pink)" : "transparent";
+            btn.style.color = isAddMode ? "white" : "var(--accent-pink)";
+            btn.textContent = isAddMode ? "Зв'язки: УВІМК" : "Зв'язки: ВИМК";
+        }
+        showToast(isAddMode ? "Режим зв'язків: Оберіть 2 сфери" : "Режим перегляду");
     };
 
-    xrScene = new THREE.Scene();
-    xrCamera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
+    // Перемикач режимів: Закриває поточну сесію та відкриває іншу
+    window.switchXRMode = function() {
+        if (activeXRSession) {
+            currentModeType = (currentModeType === "immersive-ar") ? "immersive-vr" : "immersive-ar";
+            activeXRSession.end(); // Подія закриття автоматично викличе рестарт через обробник
+        }
+    };
 
-    xrRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    xrRenderer.setSize(window.innerWidth, window.innerHeight);
-    xrRenderer.setPixelRatio(window.devicePixelRatio);
-    xrRenderer.xr.enabled = true; // УВІМКНУТИ WEBXR
+    // Створення сцени Three.js, якщо вона ще не створена
+    if (!xrScene) {
+        xrScene = new THREE.Scene();
+        xrCamera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 50);
+        
+        xrRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        xrRenderer.setSize(window.innerWidth, window.innerHeight);
+        xrRenderer.setPixelRatio(window.devicePixelRatio);
+        xrRenderer.xr.enabled = true;
 
-    const ambientLight = new THREE.AmbientLight(0xffffff, 1.0);
-    xrScene.add(ambientLight);
+        const ambientLight = new THREE.AmbientLight(0xffffff, 1.2);
+        xrScene.add(ambientLight);
 
-    graphGroup = new THREE.Group();
-    // Ставимо граф на 1 метр перед камерою та зменшуємо масштаб для реального світу
-    graphGroup.position.set(0, 0, -1.0);
-    graphGroup.scale.set(0.0015, 0.0015, 0.0015);
-    xrScene.add(graphGroup);
+        // Віртуальна сітка підлоги (видно ТІЛЬКИ у VR режимі для орієнтації в кімнаті)
+        const gridHelper = new THREE.GridHelper(10, 20, 0xff7eb3, 0x2a1035);
+        gridHelper.position.y = -1.2;
+        gridHelper.name = "vrGrid";
+        xrScene.add(gridHelper);
+
+        graphGroup = new THREE.Group();
+        graphGroup.position.set(0, 0, -1.2); // 1.2 метри від камери
+        graphGroup.scale.set(0.0016, 0.0016, 0.0016);
+        xrScene.add(graphGroup);
+    }
+
+    // Налаштування фону в залежності від AR чи VR
+    const grid = xrScene.getObjectByName("vrGrid");
+    if (currentModeType === "immersive-vr") {
+        if(grid) grid.visible = true;
+        xrScene.background = new THREE.Color(0x07050d); // Темний космос для VR
+    } else {
+        if(grid) grid.visible = false;
+        xrScene.background = null; // Прозорість для камери у AR
+    }
 
     window.refreshAR = function() {
         while(graphGroup.children.length > 0) { 
@@ -360,7 +396,7 @@ function startTrueWebXR() {
 
         people.forEach(p => {
             const geometry = new THREE.SphereGeometry(18, 32, 32);
-            const material = new THREE.MeshPhongMaterial({ color: 0xff7eb3, emissive: 0x2a0815, shininess: 40 });
+            const material = new THREE.MeshPhongMaterial({ color: 0xff7eb3, emissive: 0x2a0815, shininess: 50 });
             const sphere = new THREE.Mesh(geometry, material);
             
             sphere.position.set(p.x - 400, -(p.y - 300), p.z || 0);
@@ -368,6 +404,7 @@ function startTrueWebXR() {
             graphGroup.add(sphere);
             meshes[p.id] = sphere;
 
+            // Написи над людьми
             const canvas = document.createElement('canvas');
             canvas.width = 256; canvas.height = 64;
             const ctx = canvas.getContext('2d');
@@ -377,8 +414,7 @@ function startTrueWebXR() {
             ctx.fillText(p.name, 128, 40);
 
             const texture = new THREE.CanvasTexture(canvas);
-            const spriteMat = new THREE.SpriteMaterial({ map: texture });
-            const sprite = new THREE.Sprite(spriteMat);
+            const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture }));
             sprite.position.set(sphere.position.x, sphere.position.y + 35, sphere.position.z);
             sprite.scale.set(70, 17, 1);
             graphGroup.add(sprite);
@@ -397,7 +433,7 @@ function startTrueWebXR() {
                     color: lineColor, 
                     linewidth: 4, 
                     transparent: true,
-                    opacity: 0.5 + (shared * 0.15)
+                    opacity: 0.6 + (shared * 0.1)
                 });
                 const line = new THREE.Line(lineGeo, lineMat);
                 graphGroup.add(line);
@@ -406,17 +442,11 @@ function startTrueWebXR() {
     };
     window.refreshAR();
 
-    // Контролер WebXR (Тап по екрану телефона)
+    // Налаштування контролера (Тап по екрану / кнопка VR шолому)
     const controller = xrRenderer.xr.getController(0);
+    controller.removeEventListener('select', onSelect); // Очистка дублікатів
     controller.addEventListener('select', onSelect);
     xrScene.add(controller);
-
-    // Візуальний промінь
-    const lineGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, -1)]);
-    const lineMat = new THREE.LineBasicMaterial({ color: 0xffffff });
-    const pointerLine = new THREE.Line(lineGeo, lineMat);
-    pointerLine.scale.z = 5;
-    controller.add(pointerLine);
 
     function onSelect() {
         const tempMatrix = new THREE.Matrix4();
@@ -435,7 +465,7 @@ function startTrueWebXR() {
             if (isAddMode) {
                 if (!selectedForConnection) {
                     selectedForConnection = people.find(p => p.id === pId);
-                    showToast(`Вибір: ${pName}. Тапніть на другу вершину.`);
+                    showToast(`Вибрано: ${pName}. Наведіть на другу сферу.`);
                     clickedSphere.object.material.color.setHex(0xffffff);
                 } else {
                     if (selectedForConnection.id !== pId) {
@@ -450,47 +480,58 @@ function startTrueWebXR() {
             } else {
                 const person = people.find(p => p.id === pId);
                 clickedSphere.object.material.color.setHex(0x8e2de2);
-                showToast(`${person.name} | Інтереси: ${person.interests.join(', ')}`);
-                setTimeout(() => { if (clickedSphere.object) clickedSphere.object.material.color.setHex(0xff7eb3); }, 3000);
+                showToast(`${person.name} | ${person.interests.slice(0,3).join(', ')}`);
+                setTimeout(() => { if (clickedSphere.object) clickedSphere.object.material.color.setHex(0xff7eb3); }, 2500);
             }
         }
     }
 
-    navigator.xr.requestSession('immersive-ar', { 
-        optionalFeatures: ['dom-overlay'], 
-        domOverlay: { root: xrContainer } 
-    }).then((session) => {
+    // Опції для ініціалізації сесії
+    const sessionOptions = {
+        optionalFeatures: ['dom-overlay'],
+        domOverlay: { root: xrContainer }
+    };
+
+    navigator.xr.requestSession(currentModeType, sessionOptions).then((session) => {
+        activeXRSession = session;
         xrRenderer.xr.setSession(session);
         
-        document.getElementById('exit-ar-btn').onclick = () => session.end();
+        document.getElementById('exit-ar-btn').onclick = () => {
+            currentModeType = "immersive-ar"; // Скидання
+            session.end();
+        };
         
         session.addEventListener('end', () => {
-            xrContainer.remove();
-            xrRenderer.dispose();
-            isAddMode = false; // Скидаємо режим
+            activeXRSession = null;
+            // Якщо користувач натиснув кнопку "Увімкнути VR/AR", перезапускаємо з новим типом
+            if (document.getElementById("xr-overlay") && (currentModeType === "immersive-vr" || currentModeType === "immersive-ar")) {
+                startTrueWebXR();
+            } else {
+                // Повний вихід з XR
+                if(xrContainer) xrContainer.remove();
+                isAddMode = false;
+            }
         });
 
-        xrRenderer.setAnimationLoop((time, frame) => {
-            if (frame) {
-                graphGroup.children.forEach(child => {
-                    if (child.geometry && child.geometry.type === "SphereGeometry") {
-                        child.rotation.y += 0.01;
-                    }
-                });
-            }
+        xrRenderer.setAnimationLoop(() => {
+            graphGroup.children.forEach(child => {
+                if (child.geometry && child.geometry.type === "SphereGeometry") {
+                    child.rotation.y += 0.012; // Плавне обертання 3D-моделей людей
+                }
+            });
             xrRenderer.render(xrScene, xrCamera);
         });
     }).catch(err => {
         console.error("WebXR Error: ", err);
-        showToast("Помилка WebXR. Вмикаю 3D-симуляцію.");
-        xrContainer.remove();
+        showToast("Режим не підтримується. Вмикаю симуляцію камери.");
+        if(xrContainer) xrContainer.remove();
         startVideoAR();
     });
 }
 
-// СТАРА СИМУЛЯЦІЯ (ДЛЯ ПК)
+// РЕЖИМ СИМУЛЯЦІЇ (ДЛЯ ПК АБО СТАРИХ БРАУЗЕРІВ)
 function startVideoAR() {
-    showToast("WebXR недоступний. Ініціалізація 3D-симуляції (Відео).");
+    showToast("WebXR недоступний. Запуск 3D-симуляції.");
     
     xrContainer = document.createElement("div");
     xrContainer.style.position = "fixed";
@@ -509,7 +550,7 @@ function startVideoAR() {
     if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
         navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
             .then(stream => { videoBg.srcObject = stream; })
-            .catch(err => { xrContainer.style.background = "#07050d"; });
+            .catch(() => { xrContainer.style.background = "#07050d"; });
     }
 
     let closeBtn = document.createElement("button");
@@ -523,19 +564,6 @@ function startVideoAR() {
     };
     xrContainer.appendChild(closeBtn);
 
-    let info = document.createElement("div");
-    info.style.position = "absolute"; info.style.bottom = "20px"; info.style.left = "20px";
-    info.style.zIndex = "1000"; info.style.background = "rgba(0,0,0,0.8)";
-    info.style.padding = "15px"; info.style.borderRadius = "10px"; info.style.fontSize = "13px";
-    info.innerHTML = `
-        <h4 style="color:var(--accent-pink)">Симуляція AR</h4>
-        <p style="margin-top:4px;">Клікніть на 3D-сферу для керування зв'язками</p>
-        <div style="margin-top:8px; display:flex; gap:5px;">
-           <button onclick="window.randomizeConnections(); window.refreshAR();" class="btn secondary" style="padding:4px 8px; font-size:11px;">Рандом</button>
-        </div>
-    `;
-    xrContainer.appendChild(info);
-
     xrScene = new THREE.Scene();
     xrCamera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 1, 2000);
     xrCamera.position.set(0, 0, 500);
@@ -548,13 +576,10 @@ function startVideoAR() {
     xrRenderer.domElement.style.zIndex = "2"; 
     xrContainer.appendChild(xrRenderer.domElement);
 
-    xrScene.add(new THREE.AmbientLight(0xffffff, 0.8));
-    const pointLight = new THREE.PointLight(0xff7eb3, 1.2, 1000);
-    pointLight.position.set(0, 200, 200);
-    xrScene.add(pointLight);
+    xrScene.add(new THREE.AmbientLight(0xffffff, 0.9));
 
     window.refreshAR = function() {
-        while(xrScene.children.length > 2) { xrScene.remove(xrScene.children[xrScene.children.length - 1]); }
+        while(xrScene.children.length > 1) { xrScene.remove(xrScene.children[xrScene.children.length - 1]); }
         meshes = {};
 
         people.forEach(p => {
