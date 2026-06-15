@@ -37,7 +37,7 @@ function toggleAddMode() {
     if (isAddMode) {
         fab.classList.add("active");
         fab.innerHTML = '<i class="fas fa-magic"></i>';
-        showToast("Режим зв'язків: Клікніть на дві вершини поспіль.");
+        showToast("Режим зв'язків: Клікайте послідовно на двох людей.");
         document.getElementById("graph-svg").style.cursor = "crosshair";
     } else {
         fab.classList.remove("active");
@@ -53,14 +53,11 @@ function openNodePanel(person) {
     document.getElementById("panel-name").textContent = person.name;
     document.getElementById("panel-avatar").textContent = person.name[0];
     
-    // Відображення інтересів
     const intsContainer = document.getElementById("panel-interests");
     intsContainer.innerHTML = person.interests.map(i => `<span class="interest-tag">${i}</span>`).join('');
     
-    // === ФУНКЦІОНАЛЬНІСТЬ: ЛОГІСТИКА ТА ЛЮДИ ПОРУЧ ===
     renderNearbyPeople(person);
     
-    // Рекомендація на базі GNN
     const recs = getRecommendations(person.id);
     const recContainer = document.getElementById("panel-recommendation");
     
@@ -70,15 +67,15 @@ function openNodePanel(person) {
         recContainer.innerHTML = `
             <div style="display:flex; justify-content:space-between; align-items:center">
                 <strong>${topRec.name}</strong>
-                <span style="color:var(--accent-pink)">${Math.round(topRec.similarity * 100)}% збіг (GNN)</span>
+                <span style="color:var(--accent-pink)">${Math.round(topRec.similarity * 100)}% GNN</span>
             </div>
-            <div style="font-size:11px; margin-top:4px; opacity:0.8">Спільне: ${shared.join(', ')}</div>
+            <div style="font-size:11px; margin-top:4px; opacity:0.8">Спільні інтереси: <strong style="color:var(--accent-pink)">${shared.join(', ')}</strong></div>
             <button onclick="quickAddFriend(${person.id}, ${topRec.id})" class="btn outline-pink full-width mt-4" style="padding: 6px;">
-                <i class="fas fa-user-plus"></i> Додати зв'язок
+                <i class="fas fa-user-plus"></i> Додати друга
             </button>
         `;
     } else {
-        recContainer.innerHTML = "<div style='opacity:0.6'>Немає GNN рекомендацій</div>";
+        recContainer.innerHTML = "<div style='opacity:0.6'>Немає людей зі спільними інтересами</div>";
     }
     
     panel.dataset.currentId = person.id;
@@ -89,24 +86,22 @@ function renderNearbyPeople(centerPerson) {
     const container = document.getElementById("panel-nearby");
     if (!container) return;
 
-    // Рахуємо фізичну логістичну відстань на координатному плато
     let distances = people
         .filter(p => p.id !== centerPerson.id)
         .map(p => {
             const dx = p.x - centerPerson.x;
             const dy = p.y - centerPerson.y;
-            const dist = Math.sqrt(dx*dx + dy*dy).toFixed(1); // Логістична метрика відстані
-            const gnnSim = calculateCosineSimilarity(centerPerson, p);
-            return { ...p, distance: parseFloat(dist), gnnSim: gnnSim };
+            const dist = Math.sqrt(dx*dx + dy*dy).toFixed(1);
+            const shared = getSharedInterests(centerPerson.id, p.id).length;
+            return { ...p, distance: parseFloat(dist), sharedCount: shared };
         });
 
-    // Сортування: Спершу найближчі за географією, які мають високий збіг інтересів за GCN
-    distances.sort((a, b) => a.distance - b.distance || b.gnnSim - a.gnnSim);
+    distances.sort((a, b) => b.sharedCount - a.sharedCount || a.distance - b.distance);
 
     container.innerHTML = distances.slice(0, 3).map(p => `
-        <div class="nearby-item" style="display:flex; justify-content:space-between; margin-top:8px; font-size:12px; background:rgba(255,255,255,0.05); padding:6px; border-radius:6px;">
-            <span>📍 <strong>${p.name}</strong></span>
-            <span style="color:var(--text-muted)">Відстань: ${p.distance}м (${Math.round(p.gnnSim*100)}% GNN)</span>
+        <div class="nearby-item" style="display:flex; justify-content:space-between; margin-top:6px; font-size:12px; background:rgba(255,255,255,0.05); padding:6px; border-radius:6px;">
+            <span>🤝 <strong>${p.name}</strong> (${p.sharedCount} спільних)</span>
+            <span style="color:var(--text-muted)">відстань: ${p.distance}м</span>
         </div>
     `).join('');
 }
@@ -124,12 +119,12 @@ function buildInterestCheckboxes() {
 function createNewUser() {
     const nameInput = document.getElementById("new-user-name");
     const name = nameInput.value.trim();
-    if (!name) { showToast("Введіть ім'я!"); return; }
+    if (!name) { showToast("Введіть ім'я користувача!"); return; }
 
     const checkedBoxes = document.querySelectorAll("#interests-selector input:checked");
     const selectedInts = Array.from(checkedBoxes).map(cb => cb.value);
 
-    if (selectedInts.length === 0) { showToast("Оберіть хоча б 1 інтерес!"); return; }
+    if (selectedInts.length === 0) { showToast("Оберіть хоча б один інтерес!"); return; }
 
     const added = addCustomPerson(name, selectedInts);
     updateGraphElements();
@@ -139,7 +134,7 @@ function createNewUser() {
     switchTab(0);
     openNodePanel(added);
     animateSearch(added.id);
-    showToast(`Користувача ${name} додано й проаналізовано GNN!`);
+    showToast(`Користувача ${name} додано до системи!`);
 }
 
 function closeFloatingPanel() {
@@ -150,7 +145,7 @@ function closeFloatingPanel() {
 function quickAddFriend(id1, id2) {
     addEdge(id1, id2);
     updateGraphElements();
-    showToast("Зв'язок успішно додано!");
+    showToast("Зв'язок створено!");
     openNodePanel(people.find(p => p.id === id1));
 }
 
@@ -173,26 +168,27 @@ function findHub() {
     if (hubId !== null) {
         openNodePanel(people.find(p => p.id === hubId));
         animateSearch(hubId);
-        showToast(`Хаб топології: ${people.find(p => p.id === hubId).name} (${maxEdges} зв'язків)`);
+        showToast(`Хаб знайдено: ${people.find(p => p.id === hubId).name}`);
     }
 }
 
 function randomizeConnections() {
     edges = [];
     const count = people.length;
-    for (let i = 0; i < 60; i++) {
+    for (let i = 0; i < 45; i++) {
         let a = Math.floor(Math.random() * count);
         let b = Math.floor(Math.random() * count);
         if (a !== b) addEdge(a, b);
     }
     updateGraphElements();
-    showToast("Топологію зв'язків перегенеровано.");
+    showToast("Зв'язки графа випадково змінено.");
 }
 
+// Изменено название функции во избежание конфликтов
 function resetGraph() {
     edges = [];
     updateGraphElements();
-    showToast("Граф повністю очищено.");
+    showToast("Всі зв'язки видалено.");
 }
 
 function searchPeople(e) {
@@ -209,7 +205,6 @@ function searchPeople(e) {
     }
 }
 
-// === РЕНДЕР ТАБЛІВ ===
 function renderProfiles() {
     const container = document.getElementById("profile-grid");
     container.innerHTML = people.map(p => {
@@ -221,7 +216,7 @@ function renderProfiles() {
                 ${p.interests.map(i => `<span class="interest-tag">${i}</span>`).join('')}
             </div>
             <div style="margin-top:16px; font-size:13px; color:var(--text-muted)">
-                <i class="fas fa-link"></i> Топологічний ступінь (Валентність): ${degree}
+                Кількість друзів: ${degree}
             </div>
         </div>
     `}).join('');
@@ -235,23 +230,23 @@ function renderRecommendationsTab() {
         const recs = getRecommendations(person.id);
         if (recs.length > 0) {
             html += `
-                <div class="rec-card">
+                <div class="rec-card" style="margin-bottom: 10px; display:flex; justify-content:space-between; align-items:center; background:var(--glass-bg); padding:12px; border-radius:10px; border:1px solid var(--glass-border)">
                     <div>
-                        <strong style="color:white">${person.name}</strong> 
-                        <i class="fas fa-arrow-right mx-2" style="color:var(--text-muted); font-size:12px; margin:0 10px;"></i> 
-                        <span style="color:var(--accent-pink)">${recs[0].name}</span>
+                        <strong style="color:white; font-size:15px;">${person.name}</strong> 
+                        <i class="fas fa-arrow-right" style="color:var(--text-muted); margin:0 10px; font-size:12px;"></i> 
+                        <span style="color:var(--accent-pink); font-weight:600;">${recs[0].name}</span>
                         <div style="font-size:12px; color:var(--text-muted); margin-top:5px;">
-                            Нейромережевий збіг (GCN Embedding Vector Match): <strong>${Math.round(recs[0].similarity * 100)}%</strong> | Спільне: ${recs[0].shared.join(', ')}
+                            Спільні інтереси: <strong style="color:white">${recs[0].shared.join(', ')}</strong> | Валідність структури: ${Math.round(recs[0].similarity * 100)}%
                         </div>
                     </div>
-                    <button onclick="quickAddFriend(${person.id}, ${recs[0].id}); switchTab(0)" class="btn outline-pink">
-                        <i class="fas fa-plus"></i>
+                    <button onclick="quickAddFriend(${person.id}, ${recs[0].id}); switchTab(0)" class="btn outline-pink" style="padding:6px 12px;">
+                        <i class="fas fa-plus"></i> Додати друга
                     </button>
                 </div>
             `;
         }
     });
-    container.innerHTML = html;
+    container.innerHTML = html || "<div style='opacity:0.6'>Додайте більше унікальних інтересів для точного розрахунку моделей</div>";
 }
 
 function renderInterests() {
@@ -276,146 +271,129 @@ function showToast(message) {
     toastTimeout = setTimeout(() => { toast.classList.add("hidden"); }, 3000);
 }
 
-
 // ==========================================
-// ТЕХНОЛОГІЯ: WEBXR / AR ТРИВИМІРНИЙ ПРОСТІР
+// НАСТОЯЩЕЕ WEBXR & CAMERA PASS-THROUGH AR СЕРЕДОВИЩЕ
 // ==========================================
 let xrScene, xrCamera, xrRenderer, xrContainer;
 let meshes = {};
 
-function initARMode() {
-    showToast("Ініціалізація WebXR 3D середовища простору...");
+async function initARMode() {
+    showToast("Ініціалізація AR/VR камери...");
     
-    // Створюємо повноекранний контейнер для 3D
     xrContainer = document.createElement("div");
     xrContainer.style.position = "fixed";
-    xrContainer.style.top = "0";
-    xrContainer.style.left = "0";
-    xrContainer.style.width = "100vw";
-    xrContainer.style.height = "100vh";
-    xrContainer.style.zIndex = "999";
-    xrContainer.style.background = "#07050d";
+    xrContainer.style.top = "0"; xrContainer.style.left = "0";
+    xrContainer.style.width = "100vw"; xrContainer.style.height = "100vh";
+    xrContainer.style.zIndex = "9999";
     document.body.appendChild(xrContainer);
 
-    // Кнопка закриття AR
+    // Стриминг видео с камеры на задний фон (True AR)
+    const videoBg = document.createElement("video");
+    videoBg.style.position = "absolute";
+    videoBg.style.top = "0"; videoBg.style.left = "0";
+    videoBg.style.width = "100%"; videoBg.style.height = "100%";
+    videoBg.style.objectFit = "cover";
+    videoBg.style.zIndex = "-1";
+    videoBg.autoplay = true;
+    videoBg.playsInline = true;
+    xrContainer.appendChild(videoBg);
+
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+        videoBg.srcObject = stream;
+    } catch (err) {
+        console.warn("Камера пассру недоступна:", err);
+    }
+
+    // Кнопка выхода
     let closeBtn = document.createElement("button");
-    closeBtn.innerHTML = '<i class="fas fa-times"></i> Вийти з AR простору';
-    closeBtn.className = "btn danger";
-    closeBtn.style.position = "absolute";
-    closeBtn.style.top = "20px";
-    closeBtn.style.right = "20px";
-    closeBtn.style.zIndex = "1000";
-    closeBtn.onclick = () => { xrContainer.remove(); };
+    closeBtn.innerHTML = '<i class="fas fa-times"></i> Вийти з AR';
+    closeBtn.style.position = "absolute"; closeBtn.style.top = "20px"; closeBtn.style.right = "20px";
+    closeBtn.style.padding = "10px 20px"; closeBtn.style.background = "#ff4b4b"; closeBtn.style.color = "white";
+    closeBtn.style.border = "none"; closeBtn.style.borderRadius = "8px"; closeBtn.style.cursor = "pointer";
+    closeBtn.onclick = () => { 
+        if (videoBg.srcObject) videoBg.srcObject.getTracks().forEach(t => t.stop());
+        xrContainer.remove(); 
+    };
     xrContainer.appendChild(closeBtn);
 
-    // Інфо-панель керування у 3D
-    let info = document.createElement("div");
-    info.style.position = "absolute";
-    info.style.bottom = "20px";
-    info.style.left = "20px";
-    info.style.zIndex = "1000";
-    info.style.background = "rgba(0,0,0,0.8)";
-    info.style.padding = "15px";
-    info.style.borderRadius = "10px";
-    info.style.fontSize = "13px";
-    info.innerHTML = `
-        <h4 style="color:var(--accent-pink)">WebXR AR Контролер Мережі</h4>
-        <p style="margin-top:4px;">Клікніть на 3D-сферу для керування зв'язками</p>
-        <div style="margin-top:8px; display:flex; gap:5px;">
-           <button onclick="window.randomizeConnections(); window.refreshAR();" class="btn secondary" style="padding:4px 8px; font-size:11px;">Рандом</button>
-           <button onclick="window.resetGraph(); window.refreshAR();" class="btn danger" style="padding:4px 8px; font-size:11px;">Очистити</button>
-        </div>
-    `;
-    xrContainer.appendChild(info);
-
-    // Налаштування Three.js сцен
+    // Сцена Three.js (прозрачный альфа-канал)
     xrScene = new THREE.Scene();
-    xrScene.fog = new THREE.FogExp2(0x07050d, 0.0015);
+    xrCamera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 1, 1000);
+    xrCamera.position.set(0, 0, 400);
 
-    xrCamera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 1, 2000);
-    xrCamera.position.set(0, 0, 500);
-
-    xrRenderer = new THREE.WebGLRenderer({ antialias: true });
+    xrRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     xrRenderer.setSize(window.innerWidth, window.innerHeight);
     xrRenderer.setPixelRatio(window.devicePixelRatio);
-    xrContainer.appendChild(xrRenderer.domElement);
 
-    // Додаємо світло
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-    xrScene.add(ambientLight);
-    const pointLight = new THREE.PointLight(0xff7eb3, 1, 1000);
-    pointLight.position.set(0, 200, 200);
-    xrScene.add(pointLight);
+    // Нативная WebXR сессия для VR шлемов/смартфонов
+    if (navigator.xr) {
+        xrRenderer.xr.enabled = true;
+        const supported = await navigator.xr.isSessionSupported('immersive-ar');
+        if (supported) {
+            let xrBtn = document.createElement("button");
+            xrBtn.innerHTML = '<i class="fas fa-vr-cardboard"></i> Увійти у VR Режим гарнітури';
+            xrBtn.style.position = "absolute"; xrBtn.style.bottom = "20px"; xrBtn.style.right = "20px";
+            xrBtn.style.padding = "12px"; xrBtn.style.borderRadius = "8px";
+            xrBtn.onclick = () => {
+                navigator.xr.requestSession('immersive-ar', { requiredFeatures: ['local-floor'] }).then(s => xrRenderer.xr.setSession(s));
+            };
+            xrContainer.appendChild(xrBtn);
+        }
+    }
+
+    xrContainer.appendChild(xrRenderer.domElement);
+    xrScene.add(new THREE.AmbientLight(0xffffff, 0.9));
 
     window.refreshAR = function() {
-        // Очищаємо старі об'єкти
-        while(xrScene.children.length > 2) { 
+        while(xrScene.children.length > 1) { 
             xrScene.remove(xrScene.children[xrScene.children.length - 1]); 
         }
         meshes = {};
 
-        // Малюємо людей (Сфери з іменами)
+        // Отрисовка 3D Сфер (Люди)
         people.forEach(p => {
-            // Геометрія вузла
-            const geometry = new THREE.SphereGeometry(14, 32, 32);
-            const material = new THREE.MeshPhongMaterial({
-                color: 0xff7eb3,
-                emissive: 0x2a0815,
-                shininess: 30
-            });
-            const sphere = new THREE.Mesh(geometry, material);
+            const geo = new THREE.SphereGeometry(14, 32, 32);
+            const mat = new THREE.MeshPhongMaterial({ color: 0xff7eb3, shininess: 50 });
+            const sphere = new THREE.Mesh(geo, mat);
             
-            // Масштабуємо 2D координати D3 в 3D об'єм AR
             sphere.position.set(p.x - 400, -(p.y - 300), p.z || 0);
-            sphere.userData = { id: p.id, name: p.name };
+            sphere.userData = { id: p.id, name: p.name, interests: p.interests };
             xrScene.add(sphere);
             meshes[p.id] = sphere;
 
-            // Створення Текстового Білборда над шариком (Ім'я над кожною сферою!)
+            // Текстовые билборды с именами в 3D
             const canvas = document.createElement('canvas');
-            canvas.width = 256;
-            canvas.height = 64;
+            canvas.width = 256; canvas.height = 64;
             const ctx = canvas.getContext('2d');
             ctx.fillStyle = '#ffffff';
-            ctx.font = 'Bold 24px Inter, sans-serif';
+            ctx.font = 'Bold 20px sans-serif';
             ctx.textAlign = 'center';
             ctx.fillText(p.name, 128, 40);
 
             const texture = new THREE.CanvasTexture(canvas);
             const spriteMat = new THREE.SpriteMaterial({ map: texture });
             const sprite = new THREE.Sprite(spriteMat);
-            sprite.position.set(sphere.position.x, sphere.position.y + 25, sphere.position.z);
+            sprite.position.set(sphere.position.x, sphere.position.y + 24, sphere.position.z);
             sprite.scale.set(60, 15, 1);
             xrScene.add(sprite);
         });
 
-        // Малюємо логістичні ребра (Лінії)
+        // Отрисовка связей графа
         edges.forEach(([u, v]) => {
-            const nodeA = meshes[u];
-            const nodeB = meshes[v];
+            const nodeA = meshes[u]; const nodeB = meshes[v];
             if (nodeA && nodeB) {
-                const points = [nodeA.position, nodeB.position];
-                const lineGeo = new THREE.BufferGeometry().setFromPoints(points);
-                
-                // Колір залежить від спільних інтересів
-                const shared = getSharedInterests(u, v).length;
-                const lineColor = shared > 0 ? 0xff7eb3 : 0x8e2de2;
-
-                const lineMat = new THREE.LineBasicMaterial({ 
-                    color: lineColor, 
-                    linewidth: 2,
-                    transparent: true,
-                    opacity: 0.6
-                });
-                const line = new THREE.Line(lineGeo, lineMat);
-                xrScene.add(line);
+                const pts = [nodeA.position, nodeB.position];
+                const lineGeo = new THREE.BufferGeometry().setFromPoints(pts);
+                const lineMat = new THREE.LineBasicMaterial({ color: 0x8e2de2, transparent: true, opacity: 0.7 });
+                xrScene.add(new THREE.Line(lineGeo, lineMat));
             }
         });
     };
 
     window.refreshAR();
 
-    // Рейкастінг для взаємодії (кліки у 3D AR просторі)
+    // Клики по сферам в AR пространстве
     const raycaster = new THREE.Raycaster();
     const mouse = new THREE.Vector2();
 
@@ -425,64 +403,15 @@ function initARMode() {
         raycaster.setFromCamera(mouse, xrCamera);
         
         const intersects = raycaster.intersectObjects(xrScene.children);
-        const clickedSphere = intersects.find(i => i.object.geometry && i.object.geometry.type === "SphereGeometry");
+        const clicked = intersects.find(i => i.object.geometry && i.object.geometry.type === "SphereGeometry");
 
-        if (clickedSphere) {
-            const pId = clickedSphere.object.userData.id;
-            const pName = clickedSphere.object.userData.name;
-            
-            // Якщо увімкнено AddMode в основному інтерфейсі
-            if (isAddMode) {
-                if (!selectedForConnection) {
-                    selectedForConnection = people.find(p => p.id === pId);
-                    showToast(`AR Вибір: ${pName}. Оберіть другу вершину.`);
-                    clickedSphere.object.material.color.setHex(0xffffff);
-                } else {
-                    if (selectedForConnection.id !== pId) {
-                        const added = addEdge(selectedForConnection.id, pId);
-                        showToast(added ? "Зв'язок створено в AR!" : "Зв'язок видалено в AR!");
-                        if (!added) removeEdge(selectedForConnection.id, pId);
-                        window.refreshAR();
-                        updateGraphElements();
-                    }
-                    selectedForConnection = null;
-                }
-            } else {
-                // Перемикаємо колір для фокусу інтересів
-                const person = people.find(p => p.id === pId);
-                clickedSphere.object.material.color.setHex(0x8e2de2);
-                showToast(`Профіль: ${person.name} | Інтереси: ${person.interests.join(', ')}`);
-                setTimeout(() => clickedSphere.object.material.color.setHex(0xff7eb3), 3000);
-            }
+        if (clicked) {
+            const person = clicked.object.userData;
+            showToast(`Користувач: ${person.name} | Інтереси: ${person.interests.join(', ')}`);
         }
     });
 
-    // Обертання сцени мишкою для симуляції огляду
-    let isDragging = false;
-    let prevMouseX = 0;
-    xrRenderer.domElement.addEventListener('mousedown', (e) => { isDragging = true; prevMouseX = e.clientX; });
-    xrRenderer.domElement.addEventListener('mousemove', (e) => {
-        if (isDragging) {
-            const deltaX = e.clientX - prevMouseX;
-            xrScene.rotation.y += deltaX * 0.005;
-            prevMouseX = e.clientX;
-        }
-    });
-    window.addEventListener('mouseup', () => isDragging = false);
-
-    // Рендер-луп
-    function animate() {
-        if (!document.body.contains(xrContainer)) return;
-        requestAnimationFrame(animate);
-        
-        // Анімаційні мікрохвилі пульсації вузлів
-        xrScene.children.forEach(child => {
-            if (child.geometry && child.geometry.type === "SphereGeometry") {
-                child.rotation.y += 0.01;
-            }
-        });
-        
+    xrRenderer.setAnimationLoop(() => {
         xrRenderer.render(xrScene, xrCamera);
-    }
-    animate();
+    });
 }
