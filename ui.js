@@ -271,178 +271,130 @@ function showToast(message) {
 }
 
 // =========================================================
-// ПОВНОЦІННИЙ РЕЖИМ WEBXR (ДОПОВНЕНА РЕАЛЬНІСТЬ)
+// ПОВНОЦІННИЙ РЕЖИМ WEBXR (A-FRAME)
 // =========================================================
-let xrScene, xrCamera, xrRenderer, xrContainer;
-let graphGroup;
-let meshes = {};
 
-async function initARMode() {
-    if (!('xr' in navigator)) {
-        return showToast("WebXR не підтримується на цьому пристрої/браузері.");
-    }
+window.initARMode = async function() {
+    showToast("Ініціалізація WebXR через A-Frame...");
     
-    try {
-        const supported = await navigator.xr.isSessionSupported('immersive-ar');
-        if (supported) {
-            startTrueWebXR();
-        } else {
-            showToast("AR сесія не підтримується на цьому пристрої.");
-        }
-    } catch (err) {
-        console.error("Помилка доступу до WebXR:", err);
-        showToast("Помилка доступу до AR. Перевірте дозволи.");
+    // Динамічно завантажуємо A-Frame, якщо його ще немає в index.html
+    if (typeof AFRAME === 'undefined') {
+        const script = document.createElement('script');
+        script.src = 'https://aframe.io/releases/1.4.2/aframe.min.js';
+        script.onload = () => buildAFrameScene();
+        document.head.appendChild(script);
+    } else {
+        buildAFrameScene();
     }
-}
+};
 
-function startTrueWebXR() {
-    showToast("Запуск AR сесії...");
+function buildAFrameScene() {
+    // Приховуємо основний 2D-інтерфейс
+    document.querySelector('.app').style.display = 'none';
 
-    // 1. Створюємо DOM Overlay контейнер (для кнопок поверх камери)
-    xrContainer = document.createElement("div");
-    xrContainer.id = "xr-overlay";
-    xrContainer.style.position = "fixed";
-    xrContainer.style.top = "0";
-    xrContainer.style.left = "0";
-    xrContainer.style.width = "100vw";
-    xrContainer.style.height = "100vh";
-    xrContainer.style.zIndex = "9999";
-    xrContainer.style.pointerEvents = "none"; // Щоб кліки проходили до 3D
-    document.body.appendChild(xrContainer);
-
-    // Панель управління (кнопка виходу)
-    let info = document.createElement("div");
-    info.style.position = "absolute";
-    info.style.bottom = "40px";
-    info.style.left = "50%";
-    info.style.transform = "translateX(-50%)";
-    info.style.background = "rgba(10, 8, 18, 0.85)";
-    info.style.border = "1px solid var(--accent-pink)";
-    info.style.padding = "15px 25px";
-    info.style.borderRadius = "12px";
-    info.style.pointerEvents = "auto";
-    info.innerHTML = `
-        <h4 style="color:var(--accent-pink); margin-bottom: 10px; font-weight: 600; text-align: center;">AR Режим Графа</h4>
-        <button id="exit-ar-btn" class="btn danger" style="padding:8px 20px; font-weight: bold; width: 100%;">
-            <i class="fas fa-times"></i> Вийти з AR
-        </button>
-    `;
-    xrContainer.appendChild(info);
-
-    // 2. Налаштування Three.js
-    xrScene = new THREE.Scene();
-    xrCamera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
-
-    // alpha: true обов'язково для прозорого фону (камери смартфона)
-    xrRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    xrRenderer.setPixelRatio(window.devicePixelRatio);
-    xrRenderer.setSize(window.innerWidth, window.innerHeight);
-    xrRenderer.xr.enabled = true;
+    // Створюємо контейнер для A-Frame сцени
+    const arContainer = document.createElement('div');
+    arContainer.id = "aframe-ar-container";
+    arContainer.style.position = "fixed";
+    arContainer.style.top = "0";
+    arContainer.style.left = "0";
+    arContainer.style.width = "100vw";
+    arContainer.style.height = "100vh";
+    arContainer.style.zIndex = "9999";
+    arContainer.style.background = "#0a0812";
     
-    // КЛЮЧОВИЙ ФІКС: додаємо канвас рендера в наш контейнер, інакше нічого не відобразиться
-    xrContainer.appendChild(xrRenderer.domElement);
+    // Оверлей з кнопкою виходу (залишається активним поверх AR/3D)
+    const arUI = document.createElement('div');
+    arUI.id = "ar-overlay-ui";
+    arUI.style.position = "absolute";
+    arUI.style.bottom = "30px";
+    arUI.style.left = "50%";
+    arUI.style.transform = "translateX(-50%)";
+    arUI.style.zIndex = "10000";
+    arUI.innerHTML = `<button onclick="exitARMode()" class="btn danger" style="padding: 12px 24px; font-weight: bold; pointer-events: auto; box-shadow: 0 4px 15px rgba(0,0,0,0.5);">Вийти з 3D/AR</button>`;
+    arContainer.appendChild(arUI);
 
-    // Освітлення
-    xrScene.add(new THREE.AmbientLight(0xffffff, 0.7));
-    const dirLight = new THREE.DirectionalLight(0xff7eb3, 1.2);
-    dirLight.position.set(2, 5, 3);
-    xrScene.add(dirLight);
-
-    // 3. Побудова графа у 3D просторі
-    graphGroup = new THREE.Group();
-    graphGroup.position.set(0, 0, -1.2); // 1.2 метра прямо перед камерою
-    graphGroup.scale.set(0.0015, 0.0015, 0.0015); // Зменшуємо D3 координати до метрів
-    xrScene.add(graphGroup);
-
-    buildARGraph();
-
-    // 4. Запуск AR Сесії
-    navigator.xr.requestSession('immersive-ar', {
-        optionalFeatures: ['dom-overlay'],
-        domOverlay: { root: xrContainer }
-    }).then((session) => {
-        xrRenderer.xr.setSession(session);
-        
-        document.getElementById('exit-ar-btn').onclick = () => session.end();
-        
-        session.addEventListener('end', () => {
-            xrContainer.remove();
-            xrRenderer.dispose();
-            xrRenderer.setAnimationLoop(null);
-        });
-
-        // Головний цикл рендеру
-        xrRenderer.setAnimationLoop((time, frame) => {
-            if (frame) {
-                // Легка анімація обертання всього графа
-                graphGroup.rotation.y += 0.001;
-            }
-            xrRenderer.render(xrScene, xrCamera);
-        });
-    }).catch(err => {
-        console.error("Помилка запуску сесії:", err);
-        showToast("Помилка запуску AR сесії. Перевірте дозволи.");
-        xrContainer.remove();
-    });
-}
-
-function buildARGraph() {
-    meshes = {};
-    const centerX = 400; 
+    // Масштаб для конвертації пікселів 2D-графа у метри WebXR
+    const scale = 100;
+    const centerX = 400;
     const centerY = 300;
 
-    // Створюємо вершини
+    // Формуємо A-Frame сцену
+    // webxr="optionalFeatures: dom-overlay..." дозволяє клікати на наші HTML-кнопки в AR
+    let sceneHTML = `<a-scene embedded webxr="optionalFeatures: dom-overlay; overlayElement: #ar-overlay-ui" style="width: 100%; height: 100%; position: absolute; top: 0; left: 0;">`;
+    
+    // Фон та освітлення (hide-on-enter-ar ховає небо, щоб бачити реальний світ через камеру в AR)
+    sceneHTML += `
+        <a-sky color="#0a0812" hide-on-enter-ar></a-sky>
+        <a-light type="ambient" color="#ffffff" intensity="0.6"></a-light>
+        <a-light type="directional" color="#ff7eb3" intensity="1" position="2 5 3"></a-light>
+    `;
+
+    // Камера, віддалена назад, щоб охопити граф
+    sceneHTML += `<a-entity camera look-controls position="0 1.6 5"></a-entity>`;
+
+    // Рендер вершин (Сфери + Текст)
     people.forEach(p => {
-        const geometry = new THREE.SphereGeometry(18, 32, 32);
-        const material = new THREE.MeshPhongMaterial({ 
-            color: 0xff7eb3, 
-            emissive: 0x2a0815, 
-            shininess: 60 
-        });
-        const sphere = new THREE.Mesh(geometry, material);
-        
-        sphere.position.set(p.x - centerX, -(p.y - centerY), p.z || (Math.random() * 300 - 150));
-        graphGroup.add(sphere);
-        meshes[p.id] = sphere;
+        const px = (p.x - centerX) / scale;
+        const py = -(p.y - centerY) / scale;
+        const pz = (p.z || 0) / scale;
 
-        // Створюємо текст (імена) над вершинами
-        const canvas = document.createElement('canvas');
-        canvas.width = 256; 
-        canvas.height = 64;
-        const ctx = canvas.getContext('2d');
-        ctx.fillStyle = '#ffffff';
-        ctx.font = 'Bold 32px Inter, sans-serif';
-        ctx.textAlign = 'center';
-        ctx.strokeStyle = '#000000';
-        ctx.lineWidth = 4;
-        ctx.strokeText(p.name, 128, 45);
-        ctx.fillText(p.name, 128, 45);
-
-        const texture = new THREE.CanvasTexture(canvas);
-        const spriteMat = new THREE.SpriteMaterial({ map: texture, depthTest: false });
-        const sprite = new THREE.Sprite(spriteMat);
-        sprite.position.set(sphere.position.x, sphere.position.y + 35, sphere.position.z);
-        sprite.scale.set(100, 25, 1);
-        graphGroup.add(sprite);
+        sceneHTML += `
+            <a-sphere position="${px} ${py} ${pz}" radius="0.15" color="#ff7eb3" 
+                      animation="property: rotation; to: 0 360 0; loop: true; dur: 4000"
+                      material="emissive: #2a0815; roughness: 0.2; metalness: 0.1"></a-sphere>
+            <a-text value="${p.name}" position="${px} ${py + 0.25} ${pz}" 
+                    align="center" color="#ffffff" scale="0.6 0.6 0.6" side="double"></a-text>
+        `;
     });
 
-    // Малюємо зв'язки (ребра)
+    // Рендер зв'язків (Лінії)
     edges.forEach(([u, v]) => {
-        const nodeA = meshes[u];
-        const nodeB = meshes[v];
-        if (nodeA && nodeB) {
-            const points = [nodeA.position, nodeB.position];
-            const lineGeo = new THREE.BufferGeometry().setFromPoints(points);
+        const p1 = people.find(p => p.id === u);
+        const p2 = people.find(p => p.id === v);
+        if (p1 && p2) {
+            const px1 = (p1.x - centerX) / scale;
+            const py1 = -(p1.y - centerY) / scale;
+            const pz1 = (p1.z || 0) / scale;
+
+            const px2 = (p2.x - centerX) / scale;
+            const py2 = -(p2.y - centerY) / scale;
+            const pz2 = (p2.z || 0) / scale;
+
             const sharedCount = getSharedInterests(u, v).length;
+            const color = sharedCount > 0 ? "#ff7eb3" : "#8e2de2";
             
-            const lineMat = new THREE.LineBasicMaterial({ 
-                color: sharedCount > 0 ? 0xff7eb3 : 0x8e2de2, 
-                linewidth: 2, 
-                transparent: true,
-                opacity: 0.4 + (sharedCount * 0.1)
-            });
-            const line = new THREE.Line(lineGeo, lineMat);
-            graphGroup.add(line);
+            // Вбудований компонент line в A-Frame
+            sceneHTML += `<a-entity line="start: ${px1} ${py1} ${pz1}; end: ${px2} ${py2} ${pz2}; color: ${color};"></a-entity>`;
         }
     });
+
+    sceneHTML += `</a-scene>`;
+    
+    // Вставляємо згенерований HTML у наш контейнер
+    const sceneWrapper = document.createElement('div');
+    sceneWrapper.innerHTML = sceneHTML;
+    sceneWrapper.style.width = '100%';
+    sceneWrapper.style.height = '100%';
+    arContainer.appendChild(sceneWrapper);
+
+    document.body.appendChild(arContainer);
 }
+
+window.exitARMode = function() {
+    const arContainer = document.getElementById('aframe-ar-container');
+    if (arContainer) {
+        arContainer.remove();
+    }
+    // Повертаємо видимість стандартному інтерфейсу
+    document.querySelector('.app').style.display = 'flex';
+    showToast("Повернено до 2D інтерфейсу");
+};
+
+window.refreshAR = function() {
+    // Якщо вузли оновилися і ми знаходимося в сцені, перемальовуємо її
+    if (document.getElementById('aframe-ar-container')) {
+        window.exitARMode();
+        window.initARMode();
+    }
+};
