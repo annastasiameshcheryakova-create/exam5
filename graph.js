@@ -14,9 +14,9 @@ function initGraph() {
 
     simulation = d3.forceSimulation(people)
         .force("link", d3.forceLink().id(d => d.id).distance(130).strength(0.4))
-        .force("charge", d3.forceManyBody().strength(-700))
+        .force("charge", d3.forceManyBody().strength(-600))
         .force("center", d3.forceCenter(width / 2, height / 2))
-        .force("collision", d3.forceCollide().radius(40));
+        .force("collision", d3.forceCollide().radius(38));
 
     linksGroup = svg.append("g").attr("class", "links");
     nodesGroup = svg.append("g").attr("class", "nodes");
@@ -37,23 +37,20 @@ function updateGraphElements() {
         return { source: sNode, target: tNode, sharedCount: sharedCount };
     });
 
-    // Оновлення зв'язків (ребер)
+    // Ребра (Чистая статика)
     const links = linksGroup.selectAll("line").data(linkData, d => `${d.source.id}-${d.target.id}`);
     links.exit().remove();
 
     const linksEnter = links.enter().append("line")
         .attr("class", "link")
         .attr("stroke", "var(--edge-color)")
-        .attr("stroke-width", d => 2 + (d.sharedCount * 2))
-        // Логістична хвиля: що більше спільних інтересів, то сильніший імпульс
-        .style("stroke-dasharray", d => d.sharedCount > 0 ? "8, 4" : "none")
-        .style("animation", d => d.sharedCount > 0 ? `dash 0.${6 - d.sharedCount}s linear infinite` : "none")
-        .attr("stroke-opacity", 0.7)
+        .attr("stroke-width", d => 1.5 + (d.sharedCount * 1.5))
+        .attr("stroke-opacity", 0.6)
         .on("contextmenu", handleContextMenu);
 
     linksEnter.merge(links);
 
-    // Оновлення вершин (Вузлів): Пакуємо все в один «g», щоб уникнути десинхронізації тексту
+    // Вершины
     const nodes = nodesGroup.selectAll("g.node").data(people, d => d.id);
     nodes.exit().remove();
 
@@ -90,14 +87,12 @@ function updateGraphElements() {
 }
 
 function ticked() {
-    // Оновлення позицій ліній
     linksGroup.selectAll("line")
         .attr("x1", d => d.source.x)
         .attr("y1", d => d.source.y)
         .attr("x2", d => d.target.x)
         .attr("y2", d => d.target.y);
 
-    // СИНХРОННЕ ПЕРЕМІЩЕННЯ: Рухаємо весь контейнер разом із текстом
     nodesGroup.selectAll("g.node")
         .attr("transform", d => `translate(${d.x},${d.y})`);
 }
@@ -107,17 +102,13 @@ function handleNodeClick(event, d) {
     if (isAddMode) {
         if (!selectedForConnection) {
             selectedForConnection = d;
-            showToast(`Вибрано: ${d.name}. Клікніть на іншу людину.`);
+            showToast(`Вибрано: ${d.name}. Оберіть другого користувача.`);
             d3.select(this).select("circle").attr("stroke", "#fff").attr("stroke-width", 4);
         } else {
             if (selectedForConnection.id !== d.id) {
                 const added = addEdge(selectedForConnection.id, d.id);
-                if (added) {
-                    showToast(`Зв'язок створено!`);
-                } else {
-                    removeEdge(selectedForConnection.id, d.id);
-                    showToast(`Зв'язок розірвано.`);
-                }
+                showToast(added ? "Зв'язок створено!" : "Зв'язок розірвано.");
+                if (!added) removeEdge(selectedForConnection.id, d.id);
                 updateGraphElements();
             }
             selectedForConnection = null;
@@ -145,36 +136,27 @@ function handleContextMenu(event, d) {
     };
 }
 
+// === ЧИСТОЕ СТАТИЧЕСКОЕ ВЫДЕЛЕНИЕ СХОЖИХ УЗЛОВ ===
 function animateSearch(targetNodeId) {
     const node = people.find(p => p.id === targetNodeId);
     if (!node) return;
     
     currentHighlightedNode = node;
-    nodesGroup.selectAll(".node").classed("dimmed", true).classed("highlighted", false);
-    linksGroup.selectAll(".link").classed("dimmed", true).classed("highlighted", false);
+    nodesGroup.selectAll(".node").classed("dimmed", true);
+    linksGroup.selectAll(".link").classed("dimmed", true);
     
-    nodesGroup.selectAll(".node").filter(d => d.id === targetNodeId)
-        .classed("dimmed", false)
-        .classed("highlighted", true);
-        
+    nodesGroup.selectAll(".node").filter(d => d.id === targetNodeId).classed("dimmed", false);
+    
+    // Получаем рекомендации, отсортированные по общим интересам
     const recs = getRecommendations(targetNodeId).slice(0, 3);
     const recIds = recs.map(r => r.id);
     
-    nodesGroup.selectAll(".node").filter(d => recIds.includes(d.id))
-        .classed("dimmed", false)
-        .select("circle")
-        .attr("stroke", "var(--accent-purple)");
+    nodesGroup.selectAll(".node").filter(d => recIds.includes(d.id)).classed("dimmed", false);
 }
 
 function resetHighlights() {
     currentHighlightedNode = null;
-    nodesGroup.selectAll(".node")
-        .classed("dimmed", false)
-        .classed("highlighted", false)
-        .select("circle")
-        .attr("stroke", "var(--accent-pink)")
-        .attr("r", 24);
-        
+    nodesGroup.selectAll(".node").classed("dimmed", false);
     linksGroup.selectAll(".link").classed("dimmed", false);
 }
 
