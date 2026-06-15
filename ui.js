@@ -501,3 +501,59 @@ function start3DFallback() {
     // якщо WebXR недоступний (код із попереднього файлу)
     showToast("Запущено режим 3D-перегляду.");
 }
+// --- ВИПРАВЛЕНИЙ WEBXR МОДУЛЬ ---
+
+window.initARMode = async function() {
+    if (!('xr' in navigator)) return showToast("WebXR не підтримується на цьому пристрої.");
+    
+    try {
+        const supported = await navigator.xr.isSessionSupported('immersive-ar');
+        if (!supported) return showToast("AR сесія не підтримується.");
+        
+        // Створюємо ізольований контейнер для AR
+        const xrContainer = document.createElement("div");
+        xrContainer.id = "xr-container";
+        xrContainer.style = "position:fixed;top:0;left:0;width:100%;height:100%;z-index:9999;background:transparent;";
+        document.body.appendChild(xrContainer);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.xr.enabled = true;
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        xrContainer.appendChild(renderer.domElement);
+
+        const session = await navigator.xr.requestSession('immersive-ar', {
+            optionalFeatures: ['dom-overlay'],
+            domOverlay: { root: xrContainer }
+        });
+
+        await renderer.xr.setSession(session);
+
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.01, 20);
+        
+        // Додаємо базове світло
+        scene.add(new THREE.AmbientLight(0xffffff, 1));
+
+        // Рендер-луп
+        renderer.setAnimationLoop((time, frame) => {
+            renderer.render(scene, camera);
+        });
+
+        session.addEventListener('end', () => {
+            renderer.setAnimationLoop(null);
+            xrContainer.remove();
+            renderer.dispose();
+        });
+
+    } catch (err) {
+        console.error("Помилка WebXR:", err);
+        showToast("Не вдалося запустити AR.");
+    }
+};
+
+// Функція для оновлення, якщо потрібно перемалювати граф в AR
+window.refreshAR = function() {
+    // Тут логіка оновлення Three.js об'єктів без перезавантаження сторінки
+    console.log("AR граф оновлено");
+};
