@@ -70,7 +70,7 @@ function openNodePanel(person) {
         recContainer.innerHTML = `
             <div style="display:flex; justify-content:space-between; align-items:center">
                 <strong>${topRec.name}</strong>
-                <span style="color:var(--accent-pink)">${Math.round(topRec.similarity * 100)}% збіг (GNN)</span>
+                <span style="color:var(--accent-pink)">${Math.round(topRec.similarity * 100)}% збіг (Спільні інтереси)</span>
             </div>
             <div style="font-size:11px; margin-top:4px; opacity:0.8">Спільне: ${shared.join(', ')}</div>
             <button onclick="quickAddFriend(${person.id}, ${topRec.id})" class="btn outline-pink full-width mt-4" style="padding: 6px;">
@@ -78,7 +78,7 @@ function openNodePanel(person) {
             </button>
         `;
     } else {
-        recContainer.innerHTML = "<div style='opacity:0.6'>Немає GNN рекомендацій</div>";
+        recContainer.innerHTML = "<div style='opacity:0.6'>Немає рекомендацій (відсутні спільні інтереси)</div>";
     }
     
     panel.dataset.currentId = person.id;
@@ -139,7 +139,7 @@ function createNewUser() {
     switchTab(0);
     openNodePanel(added);
     animateSearch(added.id);
-    showToast(`Користувача ${name} додано й проаналізовано GNN!`);
+    showToast(`Користувача ${name} додано й проаналізовано за інтересами!`);
 }
 
 function closeFloatingPanel() {
@@ -209,7 +209,6 @@ function searchPeople(e) {
     }
 }
 
-// === РЕНДЕР ТАБЛІВ ===
 function renderProfiles() {
     const container = document.getElementById("profile-grid");
     container.innerHTML = people.map(p => {
@@ -241,7 +240,7 @@ function renderRecommendationsTab() {
                         <i class="fas fa-arrow-right mx-2" style="color:var(--text-muted); font-size:12px; margin:0 10px;"></i> 
                         <span style="color:var(--accent-pink)">${recs[0].name}</span>
                         <div style="font-size:12px; color:var(--text-muted); margin-top:5px;">
-                            Нейромережевий збіг (GCN Embedding Vector Match): <strong>${Math.round(recs[0].similarity * 100)}%</strong> | Спільне: ${recs[0].shared.join(', ')}
+                            Точний збіг спільних інтересів: <strong>${Math.round(recs[0].similarity * 100)}%</strong> | Спільне: ${recs[0].shared.join(', ')}
                         </div>
                     </div>
                     <button onclick="quickAddFriend(${person.id}, ${recs[0].id}); switchTab(0)" class="btn outline-pink">
@@ -276,17 +275,16 @@ function showToast(message) {
     toastTimeout = setTimeout(() => { toast.classList.add("hidden"); }, 3000);
 }
 
-
-// ==========================================
-// ТЕХНОЛОГІЯ: WEBXR / AR ТРИВИМІРНИЙ ПРОСТІР
-// ==========================================
+// =========================================================
+// ДОПОВНЕНА РЕАЛЬНІСТЬ (AR) З РЕАЛЬНИМ ЖИТТЯМ ЧЕРЕЗ КАМЕРУ
+// =========================================================
 let xrScene, xrCamera, xrRenderer, xrContainer;
 let meshes = {};
 
 function initARMode() {
-    showToast("Ініціалізація WebXR 3D середовища простору...");
+    showToast("Доступ до камери... Ініціалізація AR простору реального життя.");
     
-    // Створюємо повноекранний контейнер для 3D
+    // Створюємо повноекранний контейнер для AR
     xrContainer = document.createElement("div");
     xrContainer.style.position = "fixed";
     xrContainer.style.top = "0";
@@ -294,8 +292,32 @@ function initARMode() {
     xrContainer.style.width = "100vw";
     xrContainer.style.height = "100vh";
     xrContainer.style.zIndex = "999";
-    xrContainer.style.background = "#07050d";
+    xrContainer.style.overflow = "hidden";
     document.body.appendChild(xrContainer);
+
+    // ВІДЕОПОТІК ДЛЯ РЕАЛЬНОГО СВІТУ (Камера заднього виду / Веб-камера)
+    let videoBg = document.createElement("video");
+    videoBg.style.position = "absolute";
+    videoBg.style.top = "50%";
+    videoBg.style.left = "50%";
+    videoBg.style.width = "100%";
+    videoBg.style.height = "100%";
+    videoBg.style.objectFit = "cover";
+    videoBg.style.transform = "translate(-50%, -50%)";
+    videoBg.style.zIndex = "1";
+    videoBg.autoplay = true;
+    videoBg.playsInline = true;
+    xrContainer.appendChild(videoBg);
+
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+            .then(stream => { videoBg.srcObject = stream; })
+            .catch(err => { 
+                console.error("Камера недоступна:", err); 
+                showToast("Помилка камери. Увімкнено 3D-симуляцію.");
+                xrContainer.style.background = "#07050d";
+            });
+    }
 
     // Кнопка закриття AR
     let closeBtn = document.createElement("button");
@@ -305,7 +327,12 @@ function initARMode() {
     closeBtn.style.top = "20px";
     closeBtn.style.right = "20px";
     closeBtn.style.zIndex = "1000";
-    closeBtn.onclick = () => { xrContainer.remove(); };
+    closeBtn.onclick = () => { 
+        if (videoBg.srcObject) {
+            videoBg.srcObject.getTracks().forEach(track => track.stop());
+        }
+        xrContainer.remove(); 
+    };
     xrContainer.appendChild(closeBtn);
 
     // Інфо-панель керування у 3D
@@ -328,50 +355,50 @@ function initARMode() {
     `;
     xrContainer.appendChild(info);
 
-    // Налаштування Three.js сцен
+    // Налаштування Three.js
     xrScene = new THREE.Scene();
-    xrScene.fog = new THREE.FogExp2(0x07050d, 0.0015);
 
     xrCamera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 1, 2000);
     xrCamera.position.set(0, 0, 500);
 
-    xrRenderer = new THREE.WebGLRenderer({ antialias: true });
+    // ВМИКАЄМО ALPHA (ПРОЗОРІСТЬ), щоб бачити реальне відео через canvas
+    xrRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     xrRenderer.setSize(window.innerWidth, window.innerHeight);
     xrRenderer.setPixelRatio(window.devicePixelRatio);
+    xrRenderer.setClearColor(0x000000, 0); // Повна прозорість фону
+    xrRenderer.domElement.style.position = "absolute";
+    xrRenderer.domElement.style.top = "0";
+    xrRenderer.domElement.style.left = "0";
+    xrRenderer.domElement.style.zIndex = "2"; // Рендер поверх камери
     xrContainer.appendChild(xrRenderer.domElement);
 
     // Додаємо світло
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
     xrScene.add(ambientLight);
-    const pointLight = new THREE.PointLight(0xff7eb3, 1, 1000);
+    const pointLight = new THREE.PointLight(0xff7eb3, 1.2, 1000);
     pointLight.position.set(0, 200, 200);
     xrScene.add(pointLight);
 
     window.refreshAR = function() {
-        // Очищаємо старі об'єкти
         while(xrScene.children.length > 2) { 
             xrScene.remove(xrScene.children[xrScene.children.length - 1]); 
         }
         meshes = {};
 
-        // Малюємо людей (Сфери з іменами)
         people.forEach(p => {
-            // Геометрія вузла
             const geometry = new THREE.SphereGeometry(14, 32, 32);
             const material = new THREE.MeshPhongMaterial({
                 color: 0xff7eb3,
                 emissive: 0x2a0815,
-                shininess: 30
+                shininess: 40
             });
             const sphere = new THREE.Mesh(geometry, material);
             
-            // Масштабуємо 2D координати D3 в 3D об'єм AR
             sphere.position.set(p.x - 400, -(p.y - 300), p.z || 0);
             sphere.userData = { id: p.id, name: p.name };
             xrScene.add(sphere);
             meshes[p.id] = sphere;
 
-            // Створення Текстового Білборда над шариком (Ім'я над кожною сферою!)
             const canvas = document.createElement('canvas');
             canvas.width = 256;
             canvas.height = 64;
@@ -389,7 +416,6 @@ function initARMode() {
             xrScene.add(sprite);
         });
 
-        // Малюємо логістичні ребра (Лінії)
         edges.forEach(([u, v]) => {
             const nodeA = meshes[u];
             const nodeB = meshes[v];
@@ -397,15 +423,15 @@ function initARMode() {
                 const points = [nodeA.position, nodeB.position];
                 const lineGeo = new THREE.BufferGeometry().setFromPoints(points);
                 
-                // Колір залежить від спільних інтересів
                 const shared = getSharedInterests(u, v).length;
                 const lineColor = shared > 0 ? 0xff7eb3 : 0x8e2de2;
 
+                // Товсті лінії у просторі AR через прозорість та вагу матеріалу
                 const lineMat = new THREE.LineBasicMaterial({ 
                     color: lineColor, 
-                    linewidth: 2,
+                    linewidth: 4, 
                     transparent: true,
-                    opacity: 0.6
+                    opacity: 0.5 + (shared * 0.15)
                 });
                 const line = new THREE.Line(lineGeo, lineMat);
                 xrScene.add(line);
@@ -415,7 +441,6 @@ function initARMode() {
 
     window.refreshAR();
 
-    // Рейкастінг для взаємодії (кліки у 3D AR просторі)
     const raycaster = new THREE.Raycaster();
     const mouse = new THREE.Vector2();
 
@@ -431,7 +456,6 @@ function initARMode() {
             const pId = clickedSphere.object.userData.id;
             const pName = clickedSphere.object.userData.name;
             
-            // Якщо увімкнено AddMode в основному інтерфейсі
             if (isAddMode) {
                 if (!selectedForConnection) {
                     selectedForConnection = people.find(p => p.id === pId);
@@ -448,7 +472,6 @@ function initARMode() {
                     selectedForConnection = null;
                 }
             } else {
-                // Перемикаємо колір для фокусу інтересів
                 const person = people.find(p => p.id === pId);
                 clickedSphere.object.material.color.setHex(0x8e2de2);
                 showToast(`Профіль: ${person.name} | Інтереси: ${person.interests.join(', ')}`);
@@ -457,7 +480,6 @@ function initARMode() {
         }
     });
 
-    // Обертання сцени мишкою для симуляції огляду
     let isDragging = false;
     let prevMouseX = 0;
     xrRenderer.domElement.addEventListener('mousedown', (e) => { isDragging = true; prevMouseX = e.clientX; });
@@ -470,12 +492,10 @@ function initARMode() {
     });
     window.addEventListener('mouseup', () => isDragging = false);
 
-    // Рендер-луп
     function animate() {
         if (!document.body.contains(xrContainer)) return;
         requestAnimationFrame(animate);
         
-        // Анімаційні мікрохвилі пульсації вузлів
         xrScene.children.forEach(child => {
             if (child.geometry && child.geometry.type === "SphereGeometry") {
                 child.rotation.y += 0.01;
