@@ -5,12 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>МережаЗв'язків • Теорія Графів & GNN</title>
     <link rel="stylesheet" href="styles.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/webxr/ARButton.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/webxr/VRButton.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+    <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
     
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css" rel="stylesheet">
 </head>
@@ -58,7 +55,7 @@
                 <h2 id="page-title">Аналіз Топології та GNN Схожості</h2>
                 <div class="header-actions" style="display:flex; gap:8px;">
                     <button onclick="initARMode()" class="btn primary" style="background: linear-gradient(90deg, #8e2de2, #4a00e0);">
-                        <i class="fas fa-vr-cardboard"></i> Увімкнути AR (WebXR)
+                        <i class="fas fa-vr-cardboard"></i> Увімкнути AR (A-Frame)
                     </button>
                     <button onclick="findHub()" class="btn outline-pink">
                         <i class="fas fa-bullseye"></i> Знайти Хаб
@@ -142,6 +139,24 @@
     </div>
     
     <div id="toast" class="toast glass-panel hidden"></div>
+
+    <div id="ar-container" class="hidden" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 9999; background: #000;">
+        <button onclick="closeAR()" class="btn danger" style="position: absolute; top: 20px; right: 20px; z-index: 10000; font-weight: bold;">
+            <i class="fas fa-times"></i> Вийти з AR
+        </button>
+        
+        <a-scene embedded webxr="optionalFeatures: dom-overlay; overlayElement: #ar-container">
+            <a-assets>
+                <a-asset-item id="model-left" src="cinnamoroll.glb"></a-asset-item>
+                <a-asset-item id="model-right" src="unu.glb"></a-asset-item>
+            </a-assets>
+
+            <a-sky color="#0a0812"></a-sky>
+            <a-entity camera position="0 1.6 0" look-controls></a-entity>
+
+            <a-entity id="graph-ar-group" position="0 1.6 -2"></a-entity>
+        </a-scene>
+    </div>
 
     <script src="data.js"></script>
     <script src="graph.js"></script>
