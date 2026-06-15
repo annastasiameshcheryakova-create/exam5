@@ -37,25 +37,20 @@ function updateGraphElements() {
         return { source: sNode, target: tNode, sharedCount: sharedCount };
     });
 
-    // Оновлення зв'язків (ребер)
     const links = linksGroup.selectAll("line").data(linkData, d => `${d.source.id}-${d.target.id}`);
     links.exit().remove();
 
     const linksEnter = links.enter().append("line")
         .attr("class", "link")
         .attr("stroke", "var(--edge-color)")
-        // ТОЛСТЫЕ ЛИНИИ: Толщина зависит от количества общих интересов
         .attr("stroke-width", d => 2 + (d.sharedCount * 3))
-        // ПУНКТИР И АНИМАЦИЯ УБРАНЫ: Линии теперь всегда сплошные
         .style("stroke-dasharray", "none")
         .style("animation", "none")
-        // Непрозрачность увеличивается, если общих интересов больше
         .attr("stroke-opacity", d => 0.4 + (d.sharedCount * 0.15))
         .on("contextmenu", handleContextMenu);
 
     linksEnter.merge(links);
 
-    // Оновлення вершин (Вузлів): Пакуємо все в один «g», щоб уникнути десинхронізації тексту
     const nodes = nodesGroup.selectAll("g.node").data(people, d => d.id);
     nodes.exit().remove();
 
@@ -89,17 +84,18 @@ function updateGraphElements() {
     simulation.alpha(0.3).restart();
     
     updateStats();
+    
+    // Синхронізуємо тривимірні об'єкти в AR, якщо режим активовано
+    if (typeof window.refreshAR === "function") window.refreshAR();
 }
 
 function ticked() {
-    // Оновлення позицій ліній
     linksGroup.selectAll("line")
         .attr("x1", d => d.source.x)
         .attr("y1", d => d.source.y)
         .attr("x2", d => d.target.x)
         .attr("y2", d => d.target.y);
 
-    // СИНХРОННЕ ПЕРЕМІЩЕННЯ: Рухаємо весь контейнер разом із текстом
     nodesGroup.selectAll("g.node")
         .attr("transform", d => `translate(${d.x},${d.y})`);
 }
