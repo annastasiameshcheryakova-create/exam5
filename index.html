@@ -21,65 +21,88 @@
                 <a href="#" onclick="switchTab(0)" class="active"><i class="fas fa-network-wired"></i> Граф мережі</a>
                 <a href="#" onclick="switchTab(1)"><i class="fas fa-users"></i> Профілі</a>
                 <a href="#" onclick="switchTab(2)"><i class="fas fa-brain"></i> GNN Рекомендації</a>
-                <a href="#" onclick="switchTab(3)"><i class="fas fa-layer-group"></i> Густота інтересів</a>
+                <a href="#" onclick="switchTab(3)"><i class="fas fa-hashtag"></i> Хмара інтересів</a>
             </nav>
 
-            <div class="control-panel mt-4">
-                <div class="search-box">
-                    <i class="fas fa-search"></i>
-                    <input type="text" placeholder="Пошук людей за ім'ям..." onkeypress="searchPeople(event)">
+            <div class="custom-user-panel glass-panel" style="padding: 12px; margin-top: 15px; border-radius: 8px;">
+                <h4 style="color:var(--accent-pink); font-size:13px; margin-bottom:8px;"><i class="fas fa-user-plus"></i> Створити учасника</h4>
+                <input type="text" id="new-user-name" placeholder="Ім'я прізвище..." style="width:100%; padding:6px; background:rgba(0,0,0,0.3); border:1px solid var(--glass-border); color:white; border-radius:4px; font-size:12px; outline:none; margin-bottom:6px;">
+                <div style="font-size:11px; color:var(--text-muted); margin-bottom:4px;">Оберіть інтереси:</div>
+                <div id="interests-selector" style="max-height: 110px; overflow-y: auto; background: rgba(0,0,0,0.2); padding: 4px; border-radius: 4px; margin-bottom:8px;"></div>
+                <button onclick="createNewUser()" class="btn primary full-width" style="padding: 6px; font-size:12px;">Аналізувати GNN й додати</button>
+            </div>
+            
+            <div class="stats">
+                <div class="stat-item glass-panel">
+                    <span class="stat-value" id="total-people">0</span>
+                    <span class="stat-label">Вершин (N)</span>
                 </div>
-                
-                <div class="stats-grid mt-4">
-                    <div class="stat-card">
-                        <span class="stat-label">Вузлів (Людей)</span>
-                        <span class="stat-value" id="total-people">0</span>
-                    </div>
-                    <div class="stat-card">
-                        <span class="stat-label">Зв'язків (Ребер)</span>
-                        <span class="stat-value" id="total-edges">0</span>
-                    </div>
-                </div>
-
-                <div class="actions-grid mt-4">
-                    <button onclick="findHub()" class="btn primary"><i class="fas fa-crown"></i> Знайти Хаб</button>
-                    <button onclick="initARMode()" class="btn purple"><i class="fas fa-vr-cardboard"></i> Увійти в WebXR AR</button>
-                    <button onclick="randomizeConnections()" class="btn secondary"><i class="fas fa-random"></i> Перегенерувати</button>
-                    <button onclick="resetGraph()" class="btn danger"><i class="fas fa-trash-alt"></i> Очистити граф</button>
-                </div>
-
-                <div class="form-container mt-4 glass-panel">
-                    <h3><i class="fas fa-user-plus"></i> Аналіз нового об'єкта</h3>
-                    <input type="text" id="new-user-name" placeholder="Введіть повне ім'я..." class="mt-2">
-                    <div class="interests-selector mt-2" id="interests-selector"></div>
-                    <button onclick="createNewUser()" class="btn full-width mt-2"><i class="fas fa-calculator"></i> Інтегрувати в GNN</button>
+                <div class="stat-item glass-panel">
+                    <span class="stat-value" id="total-edges">0</span>
+                    <span class="stat-label">Ребер (E)</span>
                 </div>
             </div>
+            
+            <div class="search-box">
+                <input type="text" id="global-search" placeholder="Пошук людини (Enter)..." onkeyup="searchPeople(event)">
+            </div>
         </div>
-
+        
         <div class="main-content">
+            <header class="glass-panel">
+                <h2 id="page-title">Аналіз Топології та GNN Схожості</h2>
+                <div class="header-actions" style="display:flex; gap:8px;">
+                    <button onclick="initARMode()" class="btn primary" style="background: linear-gradient(90deg, #8e2de2, #4a00e0);">
+                        <i class="fas fa-vr-cardboard"></i> Увімкнути AR (WebXR)
+                    </button>
+                    <button onclick="findHub()" class="btn outline-pink">
+                        <i class="fas fa-bullseye"></i> Знайти Хаб
+                    </button>
+                    <button onclick="randomizeConnections()" class="btn secondary">
+                        <i class="fas fa-random"></i> Рандомізувати
+                    </button>
+                    <button onclick="resetGraph()" class="btn danger">
+                        <i class="fas fa-trash-alt"></i> Очистити
+                    </button>
+                </div>
+            </header>
+            
             <div id="tab-0" class="tab-content active">
-                <div class="graph-container">
-                    <svg id="graph-svg"></svg>
+                <div class="graph-wrapper">
+                    <div class="graph-container glass-panel">
+                        <svg id="graph-svg" width="100%" height="100%"></svg>
+                        <div class="graph-legend glass-panel">
+                            <div><span class="node-dot"></span> Людина (Вершина)</div>
+                            <div><span class="edge-line" style="background:var(--edge-color);"></span> Логістичний шлях (Ребро)</div>
+                            <div style="margin-top: 8px; font-size: 11px; opacity: 0.7;">Анімовані хвилі = Сила зв'язку</div>
+                        </div>
+                    </div>
                     
                     <div id="floating-panel" class="floating-panel glass-panel hidden">
-                        <button onclick="closeFloatingPanel()" class="close-btn">&times;</button>
-                        <div class="panel-header">
-                            <div class="avatar" id="panel-avatar">?</div>
-                            <h2 id="panel-name">Завантаження...</h2>
+                        <button class="close-btn" onclick="closeFloatingPanel()"><i class="fas fa-times"></i></button>
+                        <div class="profile-header">
+                            <div class="avatar" id="panel-avatar">А</div>
+                            <h3 id="panel-name">Ім'я</h3>
                         </div>
-                        <div class="panel-body">
-                            <h4><i class="fas fa-tags"></i> Детерміновані інтереси:</h4>
-                            <div id="panel-interests" class="interests-tags mt-2"></div>
-                            
-                            <h4 class="mt-4"><i class="fas fa-route"></i> Логістична метрика відстані:</h4>
-                            <div id="panel-nearby" class="nearby-list"></div>
+                        
+                        <div class="panel-section">
+                            <h4>Інтереси</h4>
+                            <div id="panel-interests" class="interests"></div>
+                        </div>
 
-                            <h4 class="mt-4"><i class="fas fa-brain"></i> GNN Прогноз зв'язку:</h4>
-                            <div id="panel-recommendation" class="rec-box mt-2"></div>
-                            
-                            <button onclick="highlightSimilarNodes()" class="btn primary full-width mt-4">
-                                <i class="fas fa-eye"></i> Підсвітити вектор схожості
+                        <div class="panel-section">
+                            <h4><i class="fas fa-map-marker-alt"></i> Люди поруч (Логістика простору)</h4>
+                            <div id="panel-nearby"></div>
+                        </div>
+
+                        <div class="panel-section">
+                            <h4>Рекомендація Graph Neural Network</h4>
+                            <div id="panel-recommendation" class="rec-mini-card"></div>
+                        </div>
+                        
+                        <div class="actions">
+                            <button onclick="highlightSimilarNodes()" class="btn primary full-width">
+                                <i class="fas fa-magic"></i> Знайти схожих за GCN
                             </button>
                         </div>
                     </div>
