@@ -12,7 +12,7 @@ function initGraph() {
     const width = container.clientWidth || 800;
     const height = container.clientHeight || 600;
 
-    // Force Simulation with topology analysis in mind
+    // Force Simulation
     simulation = d3.forceSimulation(people)
         .force("link", d3.forceLink().id(d => d.id).distance(120).strength(0.5))
         .force("charge", d3.forceManyBody().strength(-800))
@@ -26,6 +26,9 @@ function initGraph() {
 
     simulation.on("tick", ticked);
     
+    // Примусове оновлення після ініціалізації
+    setTimeout(() => simulation.alpha(1).restart(), 10);
+
     // Global click to close context menu
     d3.select("body").on("click", () => {
         document.getElementById("context-menu").classList.add("hidden");
@@ -37,11 +40,15 @@ function updateGraphElements() {
         const sNode = people.find(p => p.id === source);
         const tNode = people.find(p => p.id === target);
         const sharedCount = sNode && tNode ? getSharedInterests(sNode.id, tNode.id).length : 0;
-        return { source: sNode, target: tNode, sharedCount: sharedCount };
+        return { 
+            source: sNode, 
+            target: tNode, 
+            sharedCount: sharedCount 
+        };
     });
 
-    // Links update
-    const links = linksGroup.selectAll("line")
+    // === Links update ===
+    let links = linksGroup.selectAll("line")
         .data(linkData, d => `${d.source.id}-${d.target.id}`);
 
     links.exit().remove();
@@ -49,15 +56,14 @@ function updateGraphElements() {
     const linksEnter = links.enter().append("line")
         .attr("class", "link")
         .attr("stroke", "var(--edge-color)")
-        // Feature: Weight dependent on shared interests
         .attr("stroke-width", d => 1.5 + (d.sharedCount * 1.5))
         .attr("stroke-opacity", 0.6)
         .on("contextmenu", handleContextMenu);
 
-    linksEnter.merge(links);
+    links = linksEnter.merge(links);
 
-    // Nodes update
-    const nodes = nodesGroup.selectAll("g.node")
+    // === Nodes update ===
+    let nodes = nodesGroup.selectAll("g.node")
         .data(people, d => d.id);
 
     nodes.exit().remove();
@@ -74,8 +80,7 @@ function updateGraphElements() {
         .attr("r", 22)
         .attr("fill", "var(--glass-bg)")
         .attr("stroke", "var(--accent-pink)")
-        .attr("stroke-width", 2)
-        .style("backdrop-filter", "blur(4px)");
+        .attr("stroke-width", 2);
 
     nodesEnter.append("text")
         .attr("text-anchor", "middle")
@@ -86,8 +91,9 @@ function updateGraphElements() {
         .style("pointer-events", "none")
         .text(d => d.name.split(" ")[0]);
 
-    nodesEnter.merge(nodes);
+    nodes = nodesEnter.merge(nodes);
 
+    // Update simulation
     simulation.nodes(people);
     simulation.force("link").links(linkData);
     simulation.alpha(0.3).restart();
@@ -96,13 +102,15 @@ function updateGraphElements() {
 }
 
 function ticked() {
+    // Оновлення ліній (дуже важливо робити першими)
     linksGroup.selectAll("line")
         .attr("x1", d => d.source.x)
         .attr("y1", d => d.source.y)
         .attr("x2", d => d.target.x)
         .attr("y2", d => d.target.y);
 
-    nodesGroup.selectAll("g")
+    // Оновлення вершин
+    nodesGroup.selectAll("g.node")
         .attr("transform", d => `translate(${d.x},${d.y})`);
 }
 
@@ -151,18 +159,16 @@ function handleContextMenu(event, d) {
     };
 }
 
-// Search Animation Feature
+// Search Animation
 function animateSearch(targetNodeId) {
     const node = people.find(p => p.id === targetNodeId);
     if (!node) return;
     
     currentHighlightedNode = node;
     
-    // Dim all
     nodesGroup.selectAll(".node").classed("dimmed", true).classed("highlighted", false);
     linksGroup.selectAll(".link").classed("dimmed", true).classed("highlighted", false);
     
-    // Highlight target
     nodesGroup.selectAll(".node").filter(d => d.id === targetNodeId)
         .classed("dimmed", false)
         .classed("highlighted", true)
@@ -172,7 +178,6 @@ function animateSearch(targetNodeId) {
         .transition().duration(500)
         .attr("r", 22);
         
-    // Find recommendations and highlight them slightly
     const recs = getRecommendations(targetNodeId).slice(0, 3);
     const recIds = recs.map(r => r.id);
     
@@ -211,31 +216,4 @@ function dragended(event) {
     if (!event.active) simulation.alphaTarget(0);
     event.subject.fx = null;
     event.subject.fy = null;
-}
-// У файлі graph.js, в кінці функції updateGraphElements:
-
-function updateGraphElements() {
-    // ... (код створення linkData і селекції)
-
-    // Оновлюємо прив'язку даних для ліній
-    const links = linksGroup.selectAll("line")
-        .data(linkData, d => `${d.source.id}-${d.target.id}`);
-
-    links.exit().remove();
-
-    const linksEnter = links.enter().append("line")
-        .attr("class", "link")
-        .attr("stroke", "var(--edge-color)")
-        .attr("stroke-width", d => 1.5 + (d.sharedCount * 1.5))
-        .attr("stroke-opacity", 0.6)
-        .on("contextmenu", handleContextMenu);
-
-    // ВАЖЛИВО: об'єднуємо enter і update селекції
-    const linksUpdate = linksEnter.merge(links);
-
-    // ... (код вузлів залишається без змін)
-
-    simulation.nodes(people);
-    simulation.force("link").links(linkData);
-    simulation.alpha(0.3).restart();
 }
