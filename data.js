@@ -18,7 +18,7 @@ const names = [
     "Христина", "Ігор"
 ];
 
-function generatePeople(count = 25) {
+function generatePeople(count = 28) {
     people = [];
     for (let i = 0; i < count; i++) {
         const shuffled = [...interestPool].sort(() => 0.5 - Math.random());
@@ -29,76 +29,32 @@ function generatePeople(count = 25) {
             name: names[i % names.length] + " " + String.fromCharCode(65 + Math.floor(i/10)),
             interests: interests,
             x: Math.random() * 800,
-            y: Math.random() * 600,
-            z: (Math.random() - 0.5) * 200
+            y: Math.random() * 600
         });
     }
     
+    // Generate initial connections
     edges = [];
-    for (let i = 0; i < 45; i++) {
+    for (let i = 0; i < 60; i++) {
         let a = Math.floor(Math.random() * count);
         let b = Math.floor(Math.random() * count);
-        if (a !== b) addEdge(a, b);
-    }
-    
-    computeGNNEmbeddings();
-}
-
-// === ДЕТЕРМИНИРОВАННЫЙ СТАБИЛЬНЫЙ GNN ЭМБЕДДИНГ (MESSAGE PASSING) ===
-function computeGNNEmbeddings() {
-    const N = people.length;
-    const M = interestPool.length;
-    if (N === 0) return;
-
-    // Матрица признаков X (One-Hot)
-    let X = Array(N).fill(0).map(() => Array(M).fill(0));
-    people.forEach((p, idx) => {
-        p.interests.forEach(interest => {
-            const intIdx = interestPool.indexOf(interest);
-            if (intIdx !== -1) X[idx][intIdx] = 1;
-        });
-    });
-
-    // Создание фиксированного вектора (Residual Skip-Connection)
-    // Первые M измерений — личные интересы, вторые M измерений — агрегированные интересы соседей.
-    let H = Array(N).fill(0).map(() => Array(M * 2).fill(0));
-    
-    for (let i = 0; i < N; i++) {
-        // Личные интересы
-        for (let j = 0; j < M; j++) {
-            H[i][j] = X[i][j] * 2.0; 
-        }
+        while (b === a) b = Math.floor(Math.random() * count);
         
-        // Посыл сообщений от соседей по графу
-        const neighbors = edges.filter(e => e[0] === i || e[1] === i)
-                               .map(e => e[0] === i ? e[1] : e[0]);
-                               
-        neighbors.forEach(nIdx => {
-            if (nIdx < N) {
-                for (let j = 0; j < M; j++) {
-                    H[i][M + j] += X[nIdx][j] / (neighbors.length || 1);
-                }
-            }
-        });
+        if (!edges.some(e => (e[0] === a && e[1] === b) || (e[0] === b && e[1] === a))) {
+            edges.push([a, b]);
+        }
     }
-
-    people.forEach((p, idx) => {
-        p.gnnEmbedding = H[idx];
-    });
 }
 
+// ML Feature: Cosine Similarity for vectors (interests)
 function calculateCosineSimilarity(p1, p2) {
-    if (!p1.gnnEmbedding || !p2.gnnEmbedding) return 0;
-    let dotProduct = 0, normA = 0, normB = 0;
+    const intersection = p1.interests.filter(i => p2.interests.includes(i)).length;
+    if (intersection === 0) return 0;
     
-    for (let i = 0; i < p1.gnnEmbedding.length; i++) {
-        dotProduct += p1.gnnEmbedding[i] * p2.gnnEmbedding[i];
-        normA += p1.gnnEmbedding[i] * p1.gnnEmbedding[i];
-        normB += p2.gnnEmbedding[i] * p2.gnnEmbedding[i];
-    }
+    const magnitude1 = Math.sqrt(p1.interests.length);
+    const magnitude2 = Math.sqrt(p2.interests.length);
     
-    if (normA === 0 || normB === 0) return 0;
-    return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+    return intersection / (magnitude1 * magnitude2);
 }
 
 function getSharedInterests(id1, id2) {
@@ -108,38 +64,23 @@ function getSharedInterests(id1, id2) {
     return p1.interests.filter(i => p2.interests.includes(i));
 }
 
-// === ТОЧНЫЙ ПОДБОР ПО ОБЩИМ ИНТЕРЕСАМ ===
+// Подбор строго по общим интересам
 function getRecommendations(personId) {
     const person = people.find(p => p.id === personId);
     if (!person) return [];
     
-    return people
-        .filter(p => p.id !== personId)
-        // Исключаем тех, кто уже в друзьях
-        .filter(p => !edges.some(e => (e[0] === personId && e[1] === p.id) || (e[0] === p.id && e[1] === personId)))
+    const recs = people
+        .filter(p => p.id !== personId) // Не сам себя
+        .filter(p => !edges.some(e => (e[0] === personId && e[1] === p.id) || (e[0] === p.id && e[1] === personId))) // Еще не друзья
         .map(p => {
+            const shared = getSharedInterests(personId, p.id);
             const sim = calculateCosineSimilarity(person, p);
-            return { ...p, similarity: sim, shared: getSharedInterests(personId, p.id) };
+            return { ...p, similarity: sim, shared: shared };
         })
-        // Жесткий фильтр: обязательно наличие хотя бы одного общего интереса
-        .filter(p => p.shared.length > 0)
-        // Сортировка: сначала количество общих интересов, затем близость структуры графа (GNN)
-        .sort((a, b) => b.shared.length - a.shared.length || b.similarity - a.similarity);
-}
+        .filter(p => p.shared.length > 0) // Исключаем людей с нулевым совпадением
+        .sort((a, b) => b.shared.length - a.shared.length || b.similarity - a.similarity); // Приоритет по количеству общих интересов
 
-function addCustomPerson(name, selectedInterests) {
-    const newId = people.length > 0 ? Math.max(...people.map(p => p.id)) + 1 : 0;
-    const newPerson = {
-        id: newId,
-        name: name,
-        interests: selectedInterests,
-        x: 200 + Math.random() * 400,
-        y: 200 + Math.random() * 200,
-        z: (Math.random() - 0.5) * 150
-    };
-    people.push(newPerson);
-    computeGNNEmbeddings();
-    return newPerson;
+    return recs;
 }
 
 function addEdge(id1, id2) {
@@ -147,7 +88,6 @@ function addEdge(id1, id2) {
     const b = Math.max(id1, id2);
     if (!edges.some(e => e[0] === a && e[1] === b) && a !== b) {
         edges.push([a, b]);
-        computeGNNEmbeddings();
         return true;
     }
     return false;
@@ -158,6 +98,5 @@ function removeEdge(id1, id2) {
     const b = Math.max(id1, id2);
     const initialLength = edges.length;
     edges = edges.filter(e => !(e[0] === a && e[1] === b));
-    computeGNNEmbeddings();
     return edges.length < initialLength;
 }
