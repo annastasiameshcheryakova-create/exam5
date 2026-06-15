@@ -12,6 +12,7 @@ function initGraph() {
     const width = container.clientWidth || 800;
     const height = container.clientHeight || 600;
 
+    // Force Simulation
     simulation = d3.forceSimulation(people)
         .force("link", d3.forceLink().id(d => d.id).distance(120).strength(0.5))
         .force("charge", d3.forceManyBody().strength(-800))
@@ -25,9 +26,7 @@ function initGraph() {
 
     simulation.on("tick", ticked);
     
-    // Примусове перше оновлення
-    setTimeout(() => simulation.alpha(1).restart(), 50);
-
+    // Global click to close context menu
     d3.select("body").on("click", () => {
         document.getElementById("context-menu").classList.add("hidden");
     });
@@ -38,11 +37,11 @@ function updateGraphElements() {
         const sNode = people.find(p => p.id === source);
         const tNode = people.find(p => p.id === target);
         const sharedCount = sNode && tNode ? getSharedInterests(sNode.id, tNode.id).length : 0;
-        return { source: sNode, target: tNode, sharedCount };
+        return { source: sNode, target: tNode, sharedCount: sharedCount };
     });
 
-    // === LINKS ===
-    let links = linksGroup.selectAll("line")
+    // Links update
+    const links = linksGroup.selectAll("line")
         .data(linkData, d => `${d.source.id}-${d.target.id}`);
 
     links.exit().remove();
@@ -54,90 +53,9 @@ function updateGraphElements() {
         .attr("stroke-opacity", 0.6)
         .on("contextmenu", handleContextMenu);
 
-    links = linksEnter.merge(links);   // ← важливо
-
-    // === NODES ===
-    let nodes = nodesGroup.selectAll("g.node")
-        .data(people, d => d.id);
-
-    nodes.exit().remove();
-
-    const nodesEnter = nodes.enter().append("g")
-        .attr("class", "node")
-        .call(d3.drag()
-            .on("start", dragstarted)
-            .on("drag", dragged)
-            .on("end", dragended))
-        .on("click", handleNodeClick);
-
-    nodesEnter.append("circle")
-        .attr("r", 22)
-        .attr("fill", "var(--glass-bg)")
-        .attr("stroke", "var(--accent-pink)")
-        .attr("stroke-width", 2);
-
-    nodesEnter.append("text")
-        .attr("text-anchor", "middle")
-        .attr("dy", 5)
-        .attr("fill", "var(--text-main)")
-        .style("font-size", "11px")
-        .style("font-weight", "600")
-        .style("pointer-events", "none")
-        .text(d => d.name.split(" ")[0]);
-
-    nodes = nodesEnter.merge(nodes);   // ← важливо
-
-    // Оновлення симуляції
-    simulation.nodes(people);
-    simulation.force("link").links(linkData);
-    simulation.alpha(0.3).restart();
-    
-    updateStats();
-}
-
-// graph.js
-
-// ... (початок файлу без змін до функції ticked)
-
-function ticked() {
-    // 1. Оновлюємо координати ліній зв'язків
-    // Ми звертаємось до даних об'єктів, які D3 автоматично оновлює під час симуляції
-    linksGroup.selectAll(".link")
-        .attr("x1", d => d.source.x)
-        .attr("y1", d => d.source.y)
-        .attr("x2", d => d.target.x)
-        .attr("y2", d => d.target.y);
-
-    // 2. Оновлюємо позицію груп (коло + текст) через transform
-    // Це забезпечує, що текст ніколи не "відстає" від кола
-    nodesGroup.selectAll("g.node")
-        .attr("transform", d => `translate(${d.x},${d.y})`);
-}
-
-function updateGraphElements() {
-    // ВАЖЛИВО: Перетворюємо масив зв'язків на об'єкти з посиланнями на вузли
-    const linkData = edges.map(([sourceId, targetId]) => {
-        const sNode = people.find(p => p.id === sourceId);
-        const tNode = people.find(p => p.id === targetId);
-        const sharedCount = sNode && tNode ? getSharedInterests(sNode.id, tNode.id).length : 0;
-        return { source: sNode, target: tNode, sharedCount: sharedCount };
-    });
-
-    // Оновлення ліній
-    const links = linksGroup.selectAll("line.link")
-        .data(linkData, d => `${d.source.id}-${d.target.id}`);
-
-    links.exit().remove();
-
-    const linksEnter = links.enter().append("line")
-        .attr("class", "link")
-        .attr("stroke", "var(--edge-color)")
-        .attr("stroke-width", d => 1.5 + (d.sharedCount * 1.5))
-        .on("contextmenu", handleContextMenu);
-
     linksEnter.merge(links);
 
-    // Оновлення вузлів
+    // Nodes update
     const nodes = nodesGroup.selectAll("g.node")
         .data(people, d => d.id);
 
@@ -151,14 +69,12 @@ function updateGraphElements() {
             .on("end", dragended))
         .on("click", handleNodeClick);
 
-    // Додаємо коло
     nodesEnter.append("circle")
         .attr("r", 22)
         .attr("fill", "var(--glass-bg)")
         .attr("stroke", "var(--accent-pink)")
         .attr("stroke-width", 2);
 
-    // Додаємо текст (він всередині групи g, тому рухається синхронно з колом)
     nodesEnter.append("text")
         .attr("text-anchor", "middle")
         .attr("dy", 5)
@@ -168,19 +84,26 @@ function updateGraphElements() {
         .style("pointer-events", "none")
         .text(d => d.name.split(" ")[0]);
 
-    const allNodes = nodesEnter.merge(nodes);
+    nodesEnter.merge(nodes);
 
-    // Оновлюємо симуляцію
     simulation.nodes(people);
     simulation.force("link").links(linkData);
-    
-    // Перезапускаємо симуляцію для застосування змін
     simulation.alpha(0.3).restart();
     
     updateStats();
 }
 
-// ... (решта функцій файлу)
+function ticked() {
+    linksGroup.selectAll("line")
+        .attr("x1", d => d.source.x)
+        .attr("y1", d => d.source.y)
+        .attr("x2", d => d.target.x)
+        .attr("y2", d => d.target.y);
+
+    nodesGroup.selectAll("g.node")
+        .attr("transform", d => `translate(${d.x},${d.y})`);
+}
+
 function handleNodeClick(event, d) {
     event.stopPropagation();
     
@@ -226,19 +149,64 @@ function handleContextMenu(event, d) {
     };
 }
 
+// ==================== ИСПРАВЛЕННЫЕ DRAG ФУНКЦИИ ====================
+
+function dragstarted(event) {
+    if (!event.active) simulation.alphaTarget(0.3).restart();
+    
+    event.subject.fx = event.subject.x;
+    event.subject.fy = event.subject.y;
+    
+    // Визуальная обратная связь
+    d3.select(this).select("circle")
+        .attr("stroke", "#fff")
+        .attr("stroke-width", 4);
+}
+
+function dragged(event) {
+    event.subject.fx = event.x;
+    event.subject.fy = event.y;
+
+    // Немедленное обновление позиции — убирает лаг между кругом и текстом
+    d3.select(this)
+        .attr("transform", `translate(${event.x},${event.y})`);
+}
+
+function dragended(event) {
+    if (!event.active) simulation.alphaTarget(0);
+    
+    event.subject.fx = null;
+    event.subject.fy = null;
+    
+    // Возвращаем обычный стиль
+    d3.select(this).select("circle")
+        .attr("stroke", "var(--accent-pink)")
+        .attr("stroke-width", 2);
+}
+
+// ==================== АНИМАЦИЯ ПОИСКА ====================
+
 function animateSearch(targetNodeId) {
     const node = people.find(p => p.id === targetNodeId);
     if (!node) return;
     
+    currentHighlightedNode = node;
+    
+    // Dim all
     nodesGroup.selectAll(".node").classed("dimmed", true).classed("highlighted", false);
     linksGroup.selectAll(".link").classed("dimmed", true).classed("highlighted", false);
     
+    // Highlight target
     nodesGroup.selectAll(".node").filter(d => d.id === targetNodeId)
-        .classed("dimmed", false).classed("highlighted", true)
+        .classed("dimmed", false)
+        .classed("highlighted", true)
         .select("circle")
-        .transition().duration(500).attr("r", 30)
-        .transition().duration(500).attr("r", 22);
+        .transition().duration(500)
+        .attr("r", 30)
+        .transition().duration(500)
+        .attr("r", 22);
         
+    // Highlight recommendations
     const recs = getRecommendations(targetNodeId).slice(0, 3);
     const recIds = recs.map(r => r.id);
     
@@ -250,28 +218,15 @@ function animateSearch(targetNodeId) {
 }
 
 function resetHighlights() {
+    currentHighlightedNode = null;
     nodesGroup.selectAll(".node")
-        .classed("dimmed", false).classed("highlighted", false)
+        .classed("dimmed", false)
+        .classed("highlighted", false)
         .select("circle")
         .attr("stroke", "var(--accent-pink)")
         .attr("r", 22);
         
     linksGroup.selectAll(".link")
-        .classed("dimmed", false).classed("highlighted", false);
-}
-
-// Drag
-function dragstarted(event) {
-    if (!event.active) simulation.alphaTarget(0.3).restart();
-    event.subject.fx = event.subject.x;
-    event.subject.fy = event.subject.y;
-}
-function dragged(event) {
-    event.subject.fx = event.x;
-    event.subject.fy = event.y;
-}
-function dragended(event) {
-    if (!event.active) simulation.alphaTarget(0);
-    event.subject.fx = null;
-    event.subject.fy = null;
+        .classed("dimmed", false)
+        .classed("highlighted", false);
 }
