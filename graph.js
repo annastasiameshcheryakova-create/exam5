@@ -44,11 +44,13 @@ function updateGraphElements() {
     const linksEnter = links.enter().append("line")
         .attr("class", "link")
         .attr("stroke", "var(--edge-color)")
-        .attr("stroke-width", d => 2 + (d.sharedCount * 2))
-        // Логістична хвиля: що більше спільних інтересів, то сильніший імпульс
-        .style("stroke-dasharray", d => d.sharedCount > 0 ? "8, 4" : "none")
-        .style("animation", d => d.sharedCount > 0 ? `dash 0.${6 - d.sharedCount}s linear infinite` : "none")
-        .attr("stroke-opacity", 0.7)
+        // ТОЛСТЫЕ ЛИНИИ: Толщина зависит от количества общих интересов
+        .attr("stroke-width", d => 2 + (d.sharedCount * 3))
+        // ПУНКТИР И АНИМАЦИЯ УБРАНЫ: Линии теперь всегда сплошные
+        .style("stroke-dasharray", "none")
+        .style("animation", "none")
+        // Непрозрачность увеличивается, если общих интересов больше
+        .attr("stroke-opacity", d => 0.4 + (d.sharedCount * 0.15))
         .on("contextmenu", handleContextMenu);
 
     linksEnter.merge(links);
