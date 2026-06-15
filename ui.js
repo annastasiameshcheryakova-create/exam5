@@ -26,6 +26,11 @@ function switchTab(tabIndex) {
     if (tabIndex === 1) renderProfiles();
     if (tabIndex === 2) renderRecommendationsTab();
     if (tabIndex === 3) renderInterests();
+    if (tabIndex === 4) {
+        if (simulation) simulation.stop(); // Останавливаем 2D симуляцию для разгрузки процессора в AR
+    } else {
+        if (simulation && tabIndex === 0) simulation.alpha(0.3).restart();
+    }
 }
 
 function toggleAddMode() {
@@ -52,11 +57,9 @@ function openNodePanel(person) {
     document.getElementById("panel-name").textContent = person.name;
     document.getElementById("panel-avatar").textContent = person.name[0];
     
-    // Interests
     const intsContainer = document.getElementById("panel-interests");
     intsContainer.innerHTML = person.interests.map(i => `<span class="interest-tag">${i}</span>`).join('');
     
-    // Recommendation
     const recs = getRecommendations(person.id);
     const recContainer = document.getElementById("panel-recommendation");
     
@@ -66,7 +69,7 @@ function openNodePanel(person) {
         recContainer.innerHTML = `
             <div style="display:flex; justify-content:space-between; align-items:center">
                 <strong>${topRec.name}</strong>
-                <span style="color:var(--accent-pink)">${Math.round(topRec.similarity * 100)}% збіг</span>
+                <span style="color:var(--accent-pink)">${Math.round(topRec.similarity * 100)}% GNN збіг</span>
             </div>
             <div style="font-size:11px; margin-top:4px; opacity:0.8">Спільне: ${shared.join(', ')}</div>
             <button onclick="quickAddFriend(${person.id}, ${topRec.id})" class="btn outline-pink full-width mt-4" style="padding: 6px;">
@@ -89,8 +92,8 @@ function closeFloatingPanel() {
 function quickAddFriend(id1, id2) {
     addEdge(id1, id2);
     updateGraphElements();
-    showToast("Друга додано!");
-    openNodePanel(people.find(p => p.id === id1)); // refresh panel
+    showToast("Транспортний вузол підключено!");
+    openNodePanel(people.find(p => p.id === id1));
 }
 
 function highlightSimilarNodes() {
@@ -101,7 +104,6 @@ function highlightSimilarNodes() {
 
 function findHub() {
     switchTab(0);
-    // Calculate degree centrality
     let maxEdges = 0;
     let hubId = null;
     
@@ -123,19 +125,19 @@ function findHub() {
 function randomizeConnections() {
     edges = [];
     const count = people.length;
-    for (let i = 0; i < 70; i++) {
+    for (let i = 0; i < 55; i++) {
         let a = Math.floor(Math.random() * count);
         let b = Math.floor(Math.random() * count);
         if (a !== b) addEdge(a, b);
     }
     updateGraphElements();
-    showToast("Зв'язки рандомізовано.");
+    showToast("Зв'язки мережі перегенеровано.");
 }
 
 function resetGraph() {
     edges = [];
     updateGraphElements();
-    showToast("Граф очищено.");
+    showToast("Граф повністю очищено.");
 }
 
 function searchPeople(e) {
@@ -147,29 +149,32 @@ function searchPeople(e) {
             openNodePanel(found);
             animateSearch(found.id);
         } else {
-            showToast("Людину не знайдено");
+            showToast("Об'єкт не знайдено");
         }
     }
 }
 
-// Renders for other tabs
+// Рендеринг профайлов с выводом Closeness Centrality топологии
 function renderProfiles() {
     const container = document.getElementById("profile-grid");
     container.innerHTML = people.map(p => {
         const degree = edges.filter(e => e[0] === p.id || e[1] === p.id).length;
+        const closeness = calculateClosenessCentrality(p.id).toFixed(3);
         return `
         <div class="profile-card" onclick="switchTab(0); openNodePanel(people[${p.id}]); animateSearch(${p.id})">
-            <h3 style="color:var(--accent-pink); margin-bottom:12px;">${p.name}</h3>
-            <div class="interests">
+            <h3 style="color:var(--accent-pink); margin-bottom:8px;">${p.name} (ID: ${p.id})</h3>
+            <div class="interests" style="margin-bottom: 12px;">
                 ${p.interests.map(i => `<span class="interest-tag">${i}</span>`).join('')}
             </div>
-            <div style="margin-top:16px; font-size:13px; color:var(--text-muted)">
-                <i class="fas fa-link"></i> Зв'язків: ${degree}
+            <div style="font-size:12px; color:var(--text-muted); display:flex; flex-direction:column; gap:4px; border-top:1px dashed rgba(255,255,255,0.1); padding-top:8px;">
+                <span><i class="fas fa-link"></i> Ступінь вузла (Degree): ${degree}</span>
+                <span><i class="fas fa-chart-pie"></i> Близькість (Closeness Centrality): <strong>${closeness}</strong></span>
             </div>
         </div>
     `}).join('');
 }
 
+// Рендеринг ШИ рекомендаций на базе скрытых эмбеддингов нейросети GCN
 function renderRecommendationsTab() {
     const container = document.getElementById("recommendations-list");
     let html = '';
@@ -184,7 +189,7 @@ function renderRecommendationsTab() {
                         <i class="fas fa-arrow-right mx-2" style="color:var(--text-muted); font-size:12px; margin:0 10px;"></i> 
                         <span style="color:var(--accent-pink)">${recs[0].name}</span>
                         <div style="font-size:12px; color:var(--text-muted); margin-top:5px;">
-                            Збіг: ${Math.round(recs[0].similarity * 100)}% | Спільне: ${recs[0].shared.join(', ')}
+                            Нейромережевий збіг (GCN Embedding Similarity): <strong style="color:var(--accent-pink)">${Math.round(recs[0].similarity * 100)}%</strong> | Спільні інтереси: ${recs[0].shared.join(', ') || 'немає'}
                         </div>
                     </div>
                     <button onclick="quickAddFriend(${person.id}, ${recs[0].id}); switchTab(0)" class="btn outline-pink">
@@ -195,7 +200,7 @@ function renderRecommendationsTab() {
         }
     });
     
-    container.innerHTML = html;
+    container.innerHTML = html || "<div style='color:var(--text-muted);'>Побудуйте більше зв'язків для розрахунку матриць графової мережі.</div>";
 }
 
 function renderInterests() {
@@ -216,6 +221,29 @@ function renderInterests() {
         `).join('');
 }
 
+// Логика вычисления кратчайшего пути для транспортной логистики
+function calculateLogisticsRoute() {
+    const startId = parseInt(document.getElementById("logistics-start").value);
+    const endId = parseInt(document.getElementById("logistics-end").value);
+    const resultDiv = document.getElementById("logistics-result");
+
+    if (isNaN(startId) || isNaN(endId)) {
+        resultDiv.innerHTML = "<span style='color:var(--danger)'>Помилка: Введіть коректні чисельні ID вузлів!</span>";
+        return;
+    }
+
+    const routeData = findShortestLogisticsRoute(startId, endId);
+    if (routeData) {
+        const namesPath = routeData.path.map(id => {
+            let p = people.find(item => item.id === id);
+            return `${p.name} (ID: ${id})`;
+        });
+        resultDiv.innerHTML = `<span style='color:#00ffcc;'><strong>Маршрут знайдено:</strong></span> ${namesPath.join(" ➔ ")} <br><span style='font-size:12px; color:var(--text-muted);'>Загальна вартість доставки (кількість транзитних ребер): ${routeData.distance}</span>`;
+    } else {
+        resultDiv.innerHTML = "<span style='color:var(--danger)'>Шлях між вказаними транспортними вузлами заблокований або відсутній.</span>";
+    }
+}
+
 // Toast Notification System
 let toastTimeout;
 function showToast(message) {
@@ -226,5 +254,5 @@ function showToast(message) {
     clearTimeout(toastTimeout);
     toastTimeout = setTimeout(() => {
         toast.classList.add("hidden");
-    }, 3000);
+    }, 3500);
 }
