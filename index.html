@@ -3,9 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>МережаЗв'язків • Теорія Графів</title>
+    <title>МережаЗв'язків • Теорія Графів & WebXR</title>
     <link rel="stylesheet" href="styles.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+    <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css" rel="stylesheet">
 </head>
 <body>
@@ -17,10 +18,11 @@
             </div>
             
             <nav class="menu">
-                <a href="#" onclick="switchTab(0)" class="active"><i class="fas fa-network-wired"></i> Граф</a>
-                <a href="#" onclick="switchTab(1)"><i class="fas fa-users"></i> Профілі</a>
-                <a href="#" onclick="switchTab(2)"><i class="fas fa-star"></i> Рекомендації</a>
+                <a href="#" onclick="switchTab(0)" class="active"><i class="fas fa-network-wired"></i> Граф 2D</a>
+                <a href="#" onclick="switchTab(1)"><i class="fas fa-users"></i> Профілі & Топологія</a>
+                <a href="#" onclick="switchTab(2)"><i class="fas fa-brain"></i> GNN & Логістика</a>
                 <a href="#" onclick="switchTab(3)"><i class="fas fa-hashtag"></i> Інтереси</a>
+                <a href="#" onclick="switchTab(4)"><i class="fas fa-vr-cardboard"></i> WebXR AR Режим</a>
             </nav>
             
             <div class="stats">
@@ -60,8 +62,8 @@
                     <div class="graph-container glass-panel">
                         <svg id="graph-svg" width="100%" height="100%"></svg>
                         <div class="graph-legend glass-panel">
-                            <div><span class="node-dot"></span> Вершина (Людина)</div>
-                            <div><span class="edge-line"></span> Грань (Зв'язок)</div>
+                            <div><span class="node-dot"></span> Вершина (Людина / Вузол)</div>
+                            <div><span class="edge-line"></span> Транспортна магістраль</div>
                             <div style="margin-top: 8px; font-size: 11px; opacity: 0.7;">Товщина лінії = Сила зв'язку</div>
                         </div>
                     </div>
@@ -79,7 +81,7 @@
                         </div>
 
                         <div class="panel-section">
-                            <h4>Рекомендований друг</h4>
+                            <h4>Рекомендація ШІ (GNN Embedding)</h4>
                             <div id="panel-recommendation" class="rec-mini-card"></div>
                         </div>
                         
@@ -93,18 +95,46 @@
             </div>
             
             <div id="tab-1" class="tab-content">
+                <h2>Глибокий аналіз топології мережі</h2>
+                <p class="subtitle" style="color: var(--text-muted); margin-bottom: 20px;">Метрика Closeness Centrality розраховує ступінь близькості вузла до всіх інших елементів логістичної системи.</p>
                 <div class="profile-grid" id="profile-grid"></div>
             </div>
             
             <div id="tab-2" class="tab-content">
-                <h2>Алгоритм Cosine Similarity</h2>
-                <p class="subtitle">Рекомендації на основі векторного збігу інтересів.</p>
+                <h2>Машинне навчання: Graph Neural Networks (GCN)</h2>
+                <p class="subtitle" style="color: var(--text-muted);">Рекомендації формуються за допомогою 2-шарового алгоритму згортки графа (Message Passing) та косинусної подібності прихованих ембеддінгів.</p>
+                
+                <div class="logistics-panel glass-panel mt-4" style="padding: 24px; border-radius: 16px;">
+                    <h3><i class="fas fa-truck-moving" style="color: var(--accent-pink);"></i> Транспортна логістика: Пошук найкоротшого маршруту постачання</h3>
+                    <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 15px;">Введіть ID початкового та кінцевого вузлів для симуляції логістичного ланцюжка (Алгоритм Дейкстри).</p>
+                    <div style="display:flex; gap:15px; align-items:center;">
+                        <input type="number" id="logistics-start" placeholder="ID Старту (напр. 0)" style="max-width: 180px; padding: 12px; background: rgba(0,0,0,0.3); border: 1px solid var(--glass-border); border-radius: 8px; color: #fff;">
+                        <input type="number" id="logistics-end" placeholder="ID Фінішу (напр. 5)" style="max-width: 180px; padding: 12px; background: rgba(0,0,0,0.3); border: 1px solid var(--glass-border); border-radius: 8px; color: #fff;">
+                        <button onclick="calculateLogisticsRoute()" class="btn primary"><i class="fas fa-route"></i> Розрахувати шлях</button>
+                    </div>
+                    <div id="logistics-result" style="margin-top: 15px; font-size: 14px; padding: 10px; border-radius: 8px; min-height: 20px;"></div>
+                </div>
+
+                <h3 class="mt-4">Сгенеровані ШІ рекомендації зв'язків:</h3>
                 <div id="recommendations-list" class="recommendations-list mt-4"></div>
             </div>
             
             <div id="tab-3" class="tab-content">
                 <h2>Аналіз Інтересів</h2>
                 <div id="all-interests" class="interests-cloud mt-4"></div>
+            </div>
+
+            <div id="tab-4" class="tab-content">
+                <h2>Доповнена реальність WebXR (AR-Простір)</h2>
+                <p class="subtitle" style="color: var(--text-muted); margin-bottom: 15px;">Візуалізація інфраструктури зв'язків у 3D-середовищі з підтримкою гарнітур та мобільних камер.</p>
+                <button onclick="initARScene()" class="btn primary" style="margin-bottom: 15px;"><i class="fas fa-cube"></i> Запустити/Оновити 3D AR Сцену</button>
+                
+                <div id="ar-container" class="glass-panel" style="width: 100%; height: 550px; border-radius: 16px; overflow: hidden; position: relative;">
+                    <div style="position: absolute; top:50%; left:50%; transform:translate(-50%, -50%); color: var(--text-muted); text-align: center; pointer-events: none;" id="ar-placeholder">
+                        <i class="fas fa-vr-cardboard" style="font-size: 48px; margin-bottom: 15px; color: var(--accent-pink);"></i>
+                        <p>Натисніть кнопку вище для ініціалізації WebXR простору.</p>
+                    </div>
+                </div>
             </div>
         </div>
         
