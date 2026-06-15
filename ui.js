@@ -488,9 +488,9 @@ function startTrueWebXR() {
     });
 }
 
-// СТАРА СИМУЛЯЦІЯ (ДЛЯ ПК)
+// СТАРА СИМУЛЯЦІЯ (ДЛЯ ПК) ТЕПЕР З ORBIT CONTROLS ДЛЯ ВІЛЬНОГО РУХУ В 3D
 function startVideoAR() {
-    showToast("WebXR недоступний. Ініціалізація 3D-симуляції (Відео).");
+    showToast("WebXR недоступний. Ініціалізація 3D-симуляції.");
     
     xrContainer = document.createElement("div");
     xrContainer.style.position = "fixed";
@@ -513,7 +513,7 @@ function startVideoAR() {
     }
 
     let closeBtn = document.createElement("button");
-    closeBtn.innerHTML = '<i class="fas fa-times"></i> Вийти з AR';
+    closeBtn.innerHTML = '<i class="fas fa-times"></i> Вийти з 3D';
     closeBtn.className = "btn danger";
     closeBtn.style.position = "absolute"; closeBtn.style.top = "20px"; closeBtn.style.right = "20px";
     closeBtn.style.zIndex = "1000";
@@ -528,8 +528,9 @@ function startVideoAR() {
     info.style.zIndex = "1000"; info.style.background = "rgba(0,0,0,0.8)";
     info.style.padding = "15px"; info.style.borderRadius = "10px"; info.style.fontSize = "13px";
     info.innerHTML = `
-        <h4 style="color:var(--accent-pink)">Симуляція AR</h4>
-        <p style="margin-top:4px;">Клікніть на 3D-сферу для керування зв'язками</p>
+        <h4 style="color:var(--accent-pink)">Симуляція 3D / AR</h4>
+        <p style="margin-top:4px;">ЛКМ - обертання, Коліщатко - наближення, ПКМ - рух.</p>
+        <p style="margin-top:4px;">Клікніть на 3D-сферу для керування зв'язками.</p>
         <div style="margin-top:8px; display:flex; gap:5px;">
            <button onclick="window.randomizeConnections(); window.refreshAR();" class="btn secondary" style="padding:4px 8px; font-size:11px;">Рандом</button>
         </div>
@@ -547,6 +548,11 @@ function startVideoAR() {
     xrRenderer.domElement.style.top = "0"; xrRenderer.domElement.style.left = "0";
     xrRenderer.domElement.style.zIndex = "2"; 
     xrContainer.appendChild(xrRenderer.domElement);
+
+    // ДОДАНО ORBIT CONTROLS ДЛЯ ВІЛЬНОГО ПЕРЕМІЩЕННЯ В 3D
+    const controls = new THREE.OrbitControls(xrCamera, xrRenderer.domElement);
+    controls.enableDamping = true; // Плавність руху
+    controls.dampingFactor = 0.05;
 
     xrScene.add(new THREE.AmbientLight(0xffffff, 0.8));
     const pointLight = new THREE.PointLight(0xff7eb3, 1.2, 1000);
@@ -621,18 +627,20 @@ function startVideoAR() {
         }
     });
 
-    let isDragging = false, prevMouseX = 0;
-    xrRenderer.domElement.addEventListener('mousedown', (e) => { isDragging = true; prevMouseX = e.clientX; });
-    xrRenderer.domElement.addEventListener('mousemove', (e) => {
-        if (isDragging) { xrScene.rotation.y += (e.clientX - prevMouseX) * 0.005; prevMouseX = e.clientX; }
-    });
-    window.addEventListener('mouseup', () => isDragging = false);
-
+    // ОНОВЛЕНИЙ ЦИКЛ АНІМАЦІЇ ДЛЯ WEBXR
     function animate() {
-        if (!document.body.contains(xrContainer)) return;
-        requestAnimationFrame(animate);
-        xrScene.children.forEach(child => { if (child.geometry && child.geometry.type === "SphereGeometry") child.rotation.y += 0.01; });
+        if (!document.body.contains(xrContainer)) {
+            xrRenderer.setAnimationLoop(null);
+            return;
+        }
+        
+        controls.update(); // Необхідно для OrbitControls
+        
+        xrScene.children.forEach(child => { 
+            if (child.geometry && child.geometry.type === "SphereGeometry") child.rotation.y += 0.01; 
+        });
+        
         xrRenderer.render(xrScene, xrCamera);
     }
-    animate();
+    xrRenderer.setAnimationLoop(animate);
 }
