@@ -12,21 +12,18 @@ function initGraph() {
     const width = container.clientWidth || 800;
     const height = container.clientHeight || 600;
 
-    // Force Simulation with topology analysis in mind
     simulation = d3.forceSimulation(people)
-        .force("link", d3.forceLink().id(d => d.id).distance(120).strength(0.5))
-        .force("charge", d3.forceManyBody().strength(-800))
+        .force("link", d3.forceLink().id(d => d.id).distance(130).strength(0.4))
+        .force("charge", d3.forceManyBody().strength(-700))
         .force("center", d3.forceCenter(width / 2, height / 2))
-        .force("collision", d3.forceCollide().radius(35));
+        .force("collision", d3.forceCollide().radius(40));
 
     linksGroup = svg.append("g").attr("class", "links");
     nodesGroup = svg.append("g").attr("class", "nodes");
 
     updateGraphElements();
-
     simulation.on("tick", ticked);
     
-    // Global click to close context menu
     d3.select("body").on("click", () => {
         document.getElementById("context-menu").classList.add("hidden");
     });
@@ -40,26 +37,24 @@ function updateGraphElements() {
         return { source: sNode, target: tNode, sharedCount: sharedCount };
     });
 
-    // Links update
-    const links = linksGroup.selectAll("line")
-        .data(linkData, d => `${d.source.id}-${d.target.id}`);
-
+    // Оновлення зв'язків (ребер)
+    const links = linksGroup.selectAll("line").data(linkData, d => `${d.source.id}-${d.target.id}`);
     links.exit().remove();
 
     const linksEnter = links.enter().append("line")
         .attr("class", "link")
         .attr("stroke", "var(--edge-color)")
-        // Оставлено управление толщиной линий на основе количества общих интересов
-        .attr("stroke-width", d => 1.5 + (d.sharedCount * 1.5))
-        .attr("stroke-opacity", 0.6)
+        .attr("stroke-width", d => 2 + (d.sharedCount * 2))
+        // Логістична хвиля: що більше спільних інтересів, то сильніший імпульс
+        .style("stroke-dasharray", d => d.sharedCount > 0 ? "8, 4" : "none")
+        .style("animation", d => d.sharedCount > 0 ? `dash 0.${6 - d.sharedCount}s linear infinite` : "none")
+        .attr("stroke-opacity", 0.7)
         .on("contextmenu", handleContextMenu);
 
     linksEnter.merge(links);
 
-    // Nodes update
-    const nodes = nodesGroup.selectAll("g.node")
-        .data(people, d => d.id);
-
+    // Оновлення вершин (Вузлів): Пакуємо все в один «g», щоб уникнути десинхронізації тексту
+    const nodes = nodesGroup.selectAll("g.node").data(people, d => d.id);
     nodes.exit().remove();
 
     const nodesEnter = nodes.enter().append("g")
@@ -71,11 +66,10 @@ function updateGraphElements() {
         .on("click", handleNodeClick);
 
     nodesEnter.append("circle")
-        .attr("r", 22)
+        .attr("r", 24)
         .attr("fill", "var(--glass-bg)")
         .attr("stroke", "var(--accent-pink)")
-        .attr("stroke-width", 2)
-        .style("backdrop-filter", "blur(4px)");
+        .attr("stroke-width", 2);
 
     nodesEnter.append("text")
         .attr("text-anchor", "middle")
@@ -96,19 +90,20 @@ function updateGraphElements() {
 }
 
 function ticked() {
+    // Оновлення позицій ліній
     linksGroup.selectAll("line")
         .attr("x1", d => d.source.x)
         .attr("y1", d => d.source.y)
         .attr("x2", d => d.target.x)
         .attr("y2", d => d.target.y);
 
-    nodesGroup.selectAll("g")
+    // СИНХРОННЕ ПЕРЕМІЩЕННЯ: Рухаємо весь контейнер разом із текстом
+    nodesGroup.selectAll("g.node")
         .attr("transform", d => `translate(${d.x},${d.y})`);
 }
 
 function handleNodeClick(event, d) {
     event.stopPropagation();
-    
     if (isAddMode) {
         if (!selectedForConnection) {
             selectedForConnection = d;
@@ -136,7 +131,6 @@ function handleNodeClick(event, d) {
 function handleContextMenu(event, d) {
     event.preventDefault();
     event.stopPropagation();
-    
     const menu = document.getElementById("context-menu");
     menu.style.left = `${event.pageX}px`;
     menu.style.top = `${event.pageY}px`;
@@ -151,33 +145,25 @@ function handleContextMenu(event, d) {
     };
 }
 
-// Поиск без затягивающей анимации переходов (мгновенная отрисовка)
 function animateSearch(targetNodeId) {
     const node = people.find(p => p.id === targetNodeId);
     if (!node) return;
     
     currentHighlightedNode = node;
-    
-    // Мгновенное затемнение остальных элементов
     nodesGroup.selectAll(".node").classed("dimmed", true).classed("highlighted", false);
     linksGroup.selectAll(".link").classed("dimmed", true).classed("highlighted", false);
     
-    // Мгновенная подсветка цели
     nodesGroup.selectAll(".node").filter(d => d.id === targetNodeId)
         .classed("dimmed", false)
-        .classed("highlighted", true)
-        .select("circle")
-        .attr("r", 26);
+        .classed("highlighted", true);
         
-    // Нахождение лучших рекомендаций по интересам и мгновенное выделение цветом
     const recs = getRecommendations(targetNodeId).slice(0, 3);
     const recIds = recs.map(r => r.id);
     
     nodesGroup.selectAll(".node").filter(d => recIds.includes(d.id))
         .classed("dimmed", false)
         .select("circle")
-        .attr("stroke", "var(--accent-purple)")
-        .attr("stroke-width", 3);
+        .attr("stroke", "var(--accent-purple)");
 }
 
 function resetHighlights() {
@@ -187,15 +173,11 @@ function resetHighlights() {
         .classed("highlighted", false)
         .select("circle")
         .attr("stroke", "var(--accent-pink)")
-        .attr("stroke-width", 2)
-        .attr("r", 22);
+        .attr("r", 24);
         
-    linksGroup.selectAll(".link")
-        .classed("dimmed", false)
-        .classed("highlighted", false);
+    linksGroup.selectAll(".link").classed("dimmed", false);
 }
 
-// Drag functionality
 function dragstarted(event) {
     if (!event.active) simulation.alphaTarget(0.3).restart();
     event.subject.fx = event.subject.x;
