@@ -212,3 +212,30 @@ function dragended(event) {
     event.subject.fx = null;
     event.subject.fy = null;
 }
+// У файлі graph.js, в кінці функції updateGraphElements:
+
+function updateGraphElements() {
+    // ... (код створення linkData і селекції)
+
+    // Оновлюємо прив'язку даних для ліній
+    const links = linksGroup.selectAll("line")
+        .data(linkData, d => `${d.source.id}-${d.target.id}`);
+
+    links.exit().remove();
+
+    const linksEnter = links.enter().append("line")
+        .attr("class", "link")
+        .attr("stroke", "var(--edge-color)")
+        .attr("stroke-width", d => 1.5 + (d.sharedCount * 1.5))
+        .attr("stroke-opacity", 0.6)
+        .on("contextmenu", handleContextMenu);
+
+    // ВАЖЛИВО: об'єднуємо enter і update селекції
+    const linksUpdate = linksEnter.merge(links);
+
+    // ... (код вузлів залишається без змін)
+
+    simulation.nodes(people);
+    simulation.force("link").links(linkData);
+    simulation.alpha(0.3).restart();
+}
