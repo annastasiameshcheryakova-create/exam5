@@ -255,3 +255,22 @@ header {
     position: absolute !important;
     top: 0; left: 0;
 }
+/* Анімація хвиль зв'язку (імпульси ребер графа) */
+@keyframes dash {
+    to {
+        stroke-dashoffset: -20;
+    }
+}
+
+.link {
+    transition: stroke 0.3s, stroke-width 0.3s;
+}
+
+/* Стилі для логістичного блоку люди поруч */
+.nearby-item {
+    border-left: 3px solid var(--accent-pink);
+    transition: background 0.2s;
+}
+.nearby-item:hover {
+    background: rgba(255, 126, 179, 0.15) !important;
+}
