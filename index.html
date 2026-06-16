@@ -54,24 +54,25 @@
             </div>
         </div>
         
-        <div class="main-content">
-            <header class="glass-panel">
-                <h2 id="page-title">Аналіз Топології та GNN Схожості</h2>
-                <div class="header-actions" style="display:flex; gap:8px;">
-                    <button onclick="initARMode()" class="btn primary" style="background: linear-gradient(90deg, #8e2de2, #4a00e0);">
-                        <i class="fas fa-vr-cardboard"></i> Увімкнути AR (WebXR)
-                    </button>
-                    <button onclick="findHub()" class="btn outline-pink">
-                        <i class="fas fa-bullseye"></i> Знайти Хаб
-                    </button>
-                    <button onclick="randomizeConnections()" class="btn secondary">
-                        <i class="fas fa-random"></i> Рандомізувати
-                    </button>
-                    <button onclick="resetGraph()" class="btn danger">
-                        <i class="fas fa-trash-alt"></i> Очистити
-                    </button>
-                </div>
-            </header>
+    <div class="header-actions" style="display:flex; gap:8px; flex-wrap: wrap;">
+    <button onclick="initARMode()" class="btn primary" style="background: linear-gradient(90deg, #8e2de2, #4a00e0);">
+        <i class="fas fa-cube"></i> 3D Візуалізація
+    </button>
+    
+    <button onclick="openAFrameXR()" class="btn primary" style="background: linear-gradient(135deg, #ff7eb3, #8e2de2); box-shadow: 0 4px 15px rgba(142, 45, 226, 0.4);">
+        <i class="fas fa-vr-cardboard"></i> A-Frame WebXR
+    </button>
+
+    <button onclick="findHub()" class="btn outline-pink">
+        <i class="fas fa-bullseye"></i> Знайти Хаб
+    </button>
+    <button onclick="randomizeConnections()" class="btn secondary">
+        <i class="fas fa-random"></i> Рандомізувати
+    </button>
+    <button onclick="resetGraph()" class="btn danger">
+        <i class="fas fa-trash-alt"></i> Очистити
+    </button>
+</div>
             
             <div id="tab-0" class="tab-content active">
                 <div class="graph-wrapper">
@@ -80,7 +81,7 @@
                         <div class="graph-legend glass-panel">
                             <div><span class="node-dot"></span> Людина (Вершина)</div>
                             <div><span class="edge-line" style="background:var(--edge-color);"></span> Логістичний шлях (Ребро)</div>
-                            <div style="margin-top: 8px; font-size: 11px; opacity: 0.7;">Анімовані хвилі = Сила зв'язку</div>
+                            <div style="margin-top: 8px; font-size: 11px; opacity: 0.7;">Товщина ліній = Сила зв'язку</div>
                         </div>
                     </div>
                     
@@ -148,4 +149,11 @@
     <script src="graph.js"></script>
     <script src="ui.js"></script>
 </body>
+    <div id="aframe-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 10000; background: #000;">
+    <button onclick="closeAFrameScene()" style="position: absolute; top: 20px; left: 20px; z-index: 10001; padding: 12px 24px; background: rgba(30, 25, 45, 0.85); color: #f0e6f5; border: 1px solid rgba(255, 126, 179, 0.3); border-radius: 30px; cursor: pointer; font-family: 'Inter', sans-serif; font-weight: 600; backdrop-filter: blur(10px); transition: all 0.3s;">
+        <i class="fas fa-arrow-left"></i> Назад в проект
+    </button>
+    
+    <iframe id="aframe-frame" style="width: 100%; height: 100%; border: none;"></iframe>
+</div>
 </html>
