@@ -271,41 +271,215 @@ function showToast(message) {
 }
 
 // =========================================================
-// ДОПОВНЕНА РЕАЛЬНІСТЬ (AR) З ПІДТРИМКОЮ WEBXR
 // =========================================================
-let xrScene, xrCamera, xrRenderer, xrContainer;
+// ДОПОВНЕНА РЕАЛЬНІСТЬ (AR) З ВИКОРИСТАННЯМ A-FRAME (WebXR)
+// =========================================================
+let graphGroup; // Група для збереження об'єктів графа
 let meshes = {};
-let graphGroup; // Використовуємо групу для масштабування в AR
 
 function initARMode() {
-    if ('xr' in navigator) {
-        navigator.xr.isSessionSupported('immersive-ar').then((supported) => {
-            if (supported) {
-                startTrueWebXR();
-            } else {
-                startVideoAR(); // Fallback для ПК / старих браузерів
-            }
-        });
-    } else {
-        startVideoAR();
-    }
+    showToast("Ініціалізація WebXR через A-Frame...");
+    startAFrameAR();
 }
 
-// СПРАВЖНІЙ WEBXR (ДЛЯ ТЕЛЕФОНІВ)
-function startTrueWebXR() {
-    showToast("Запуск WebXR AR...");
-
-    xrContainer = document.createElement("div");
+function startAFrameAR() {
+    // 1. Створюємо контейнер-оверлей
+    const xrContainer = document.createElement("div");
     xrContainer.id = "xr-overlay";
     xrContainer.style.position = "fixed";
-    xrContainer.style.top = "0";
-    xrContainer.style.left = "0";
-    xrContainer.style.width = "100vw";
-    xrContainer.style.height = "100vh";
+    xrContainer.style.top = "0"; xrContainer.style.left = "0";
+    xrContainer.style.width = "100vw"; xrContainer.style.height = "100vh";
     xrContainer.style.zIndex = "999";
-    xrContainer.style.pointerEvents = "none"; // Щоб кліки проходили до WebXR канвасу
     document.body.appendChild(xrContainer);
 
+    // 2. Структура A-Frame сцени всередині оверлея
+    // Налаштовуємо embedded сцену з підтримкою WebXR AR/VR
+    xrContainer.innerHTML = `
+        <a-scene embedded xr-mode-ui="enabled: true; enterARElement: #custom-enter-ar" raycaster="objects: .clickable">
+            <a-sky color="#07050d" material="opacity: 0.5"></a-sky>
+            <a-plane position="0 -1.5 0" rotation="-90 0 0" width="30" height="30" color="#110d21" opacity="0.3"></a-plane>
+            
+            <a-entity id="graph-holder" position="0 0 -1.5" scale="0.0015 0.0015 0.0015"></a-entity>
+            
+            <a-entity camera look-controls position="0 0 0">
+                <a-cursor id="cursor" animation__click="property: scale; startEvents: click; from: 0.1 0.1 0.1; to: 1 1 1; dur: 150"
+                          geometry="primitive: ring; radiusInner: 0.02; radiusOuter: 0.03"
+                          material="color: #ff7eb3; shader: flat"
+                          raycaster="objects: .clickable"></a-cursor>
+            </a-entity>
+            
+            <a-entity laser-controls="hand: right" raycaster="objects: .clickable; far: 50"></a-entity>
+        </a-scene>
+
+        <div id="ar-controls-panel" style="position: absolute; bottom: 20px; left: 20px; background: rgba(0,0,0,0.85); padding: 15px; border-radius: 10px; z-index: 1000; font-family: sans-serif; color: white;">
+            <h4 style="color:var(--accent-pink); margin: 0 0 5px 0;">A-Frame WebXR Мережа</h4>
+            <p style="margin:0 0 10px 0; font-size:12px;">Наведіть курсор/промінь та клікніть на сферу</p>
+            <div style="display:flex; gap:8px;">
+               <button onclick="window.toggleARAddMode()" class="btn outline-pink" id="ar-add-btn" style="padding:6px 12px; font-size:11px; background: transparent; border: 1px solid var(--accent-pink); color: var(--accent-pink); border-radius:4px; cursor:pointer;">Режим зв'язків: ВИМК</button>
+               <button id="exit-ar-btn" class="btn danger" style="padding:6px 12px; font-size:11px; background:#ff4a5a; color:white; border:none; border-radius:4px; cursor:pointer;">Вийти з 3D</button>
+            </div>
+        </div>
+    `;
+
+    // Кнопка виходу
+    document.getElementById('exit-ar-btn').onclick = () => {
+        isAddMode = false;
+        xrContainer.remove();
+        showToast("Вихід з WebXR сцени");
+    };
+
+    // Перемикач режимів зв'язків
+    window.toggleARAddMode = function() {
+        isAddMode = !isAddMode;
+        selectedForConnection = null;
+        const btn = document.getElementById('ar-add-btn');
+        if (isAddMode) {
+            btn.style.background = "var(--accent-pink)";
+            btn.style.color = "white";
+            btn.textContent = "Режим зв'язків: УВІМК";
+            showToast("Оберіть дві вершини для з'єднання.");
+        } else {
+            btn.style.background = "transparent";
+            btn.style.color = "var(--accent-pink)";
+            btn.textContent = "Режим зв'язків: ВИМК";
+            showToast("Режим перегляду інтересів.");
+        }
+    };
+
+    // 3. Чекаємо завантаження A-Frame сцени, щоб додати об'єкти Three.js всередину
+    const sceneEl = xrContainer.querySelector('a-scene');
+    sceneEl.addEventListener('loaded', () => {
+        const holderEl = document.getElementById('graph-holder');
+        graphGroup = holderEl.object3D; // Отримуємо доступ до рідного Three.js Object3D компонента A-Frame!
+
+        // Додаємо базове світло у Three.js групу
+        const ambientLight = new THREE.AmbientLight(0xffffff, 1.2);
+        graphGroup.add(ambientLight);
+
+        window.refreshAR = function() {
+            // Очищуємо попередні елементи, крім світла
+            for (let i = graphGroup.children.length - 1; i >= 0; i--) {
+                if (graphGroup.children[i].type !== "AmbientLight") {
+                    graphGroup.remove(graphGroup.children[i]);
+                }
+            }
+            meshes = {};
+
+            // Генерація сфер (вершин людей)
+            people.forEach(p => {
+                const geometry = new THREE.SphereGeometry(18, 32, 32);
+                const material = new THREE.MeshPhongMaterial({ 
+                    color: 0xff7eb3, 
+                    emissive: 0x2a0815, 
+                    shininess: 40 
+                });
+                const sphere = new THREE.Mesh(geometry, material);
+                
+                // Центруємо координати у 3D просторі
+                sphere.position.set(p.x - 400, -(p.y - 300), p.z || 0);
+                sphere.userData = { id: p.id, name: p.name };
+                
+                // КРИТИЧНО ДЛЯ A-FRAME: маркуємо об'єкт як такий, що реагує на промінь (Cursor/Raycaster)
+                sphere.el = holderEl; 
+                
+                graphGroup.add(sphere);
+                meshes[p.id] = sphere;
+
+                // Текстова плашка з іменем користувача
+                const canvas = document.createElement('canvas');
+                canvas.width = 256; canvas.height = 64;
+                const ctx = canvas.getContext('2d');
+                ctx.fillStyle = '#ffffff';
+                ctx.font = 'Bold 24px Inter, sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText(p.name, 128, 40);
+
+                const texture = new THREE.CanvasTexture(canvas);
+                const spriteMat = new THREE.SpriteMaterial({ map: texture });
+                const sprite = new THREE.Sprite(spriteMat);
+                sprite.position.set(sphere.position.x, sphere.position.y + 35, sphere.position.z);
+                sprite.scale.set(70, 17, 1);
+                graphGroup.add(sprite);
+            });
+
+            // Малювання ліній зв'язків між людьми
+            edges.forEach(([u, v]) => {
+                const nodeA = meshes[u];
+                const nodeB = meshes[v];
+                if (nodeA && nodeB) {
+                    const points = [nodeA.position, nodeB.position];
+                    const lineGeo = new THREE.BufferGeometry().setFromPoints(points);
+                    const shared = getSharedInterests(u, v).length;
+                    const lineColor = shared > 0 ? 0xff7eb3 : 0x8e2de2;
+
+                    const lineMat = new THREE.LineBasicMaterial({ 
+                        color: lineColor, 
+                        linewidth: 4, 
+                        transparent: true,
+                        opacity: 0.5 + (shared * 0.15)
+                    });
+                    const line = new THREE.Line(lineGeo, lineMat);
+                    graphGroup.add(line);
+                }
+            });
+        };
+
+        // Запускаємо першу побудову графа
+        window.refreshAR();
+
+        // 4. Обробка кліків по сферах через Raycaster від A-Frame
+        sceneEl.addEventListener('click', (evt) => {
+            // Перевіряємо через Three.js raycaster, чи потрапили саме у сферу
+            const raycaster = sceneEl.components.raycaster.raycaster;
+            const intersects = raycaster.intersectObjects(graphGroup.children, true);
+            const clickedSphere = intersects.find(i => i.object.geometry && i.object.geometry.type === "SphereGeometry");
+
+            if (clickedSphere) {
+                const pId = clickedSphere.object.userData.id;
+                const pName = clickedSphere.object.userData.name;
+                
+                if (isAddMode) {
+                    if (!selectedForConnection) {
+                        selectedForConnection = people.find(p => p.id === pId);
+                        showToast(`Вибір: ${pName}. Клікніть на другу вершину.`);
+                        clickedSphere.object.material.color.setHex(0xffffff); // Підсвічуємо білим
+                    } else {
+                        if (selectedForConnection.id !== pId) {
+                            const added = addEdge(selectedForConnection.id, pId);
+                            showToast(added ? "Зв'язок створено!" : "Зв'язок розірвано!");
+                            if (!added) removeEdge(selectedForConnection.id, pId);
+                            window.refreshAR();
+                            updateGraphElements();
+                        }
+                        selectedForConnection = null;
+                    }
+                } else {
+                    const person = people.find(p => p.id === pId);
+                    clickedSphere.object.material.color.setHex(0x8e2de2); // Тимчасовий колір при кліку
+                    showToast(`${person.name} | Інтереси: ${person.interests.join(', ')}`);
+                    setTimeout(() => { 
+                        if (clickedSphere.object && clickedSphere.object.material) {
+                            clickedSphere.object.material.color.setHex(0xff7eb3); 
+                        }
+                    }, 3000);
+                }
+            }
+        });
+
+        // 5. Анімаційний такт A-Frame (Обертання сфер для динаміки)
+        function animateAFrame() {
+            if (!document.getElementById("xr-overlay")) return; // Зупинка, якщо вийшли
+            
+            graphGroup.children.forEach(child => {
+                if (child.geometry && child.geometry.type === "SphereGeometry") {
+                    child.rotation.y += 0.01;
+                }
+            });
+            requestAnimationFrame(animateAFrame);
+        }
+        animateAFrame();
+    });
+}
     // Панель керування (DOM Overlay для WebXR)
     let info = document.createElement("div");
     info.style.position = "absolute";
