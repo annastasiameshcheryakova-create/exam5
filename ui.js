@@ -644,3 +644,42 @@ function startVideoAR() {
     }
     xrRenderer.setAnimationLoop(animate);
 }
+// Добавьте эту функцию в ui.js
+function initARMode() {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.xr.enabled = true;
+    container.appendChild(renderer.domElement);
+
+    // Добавляем освещение
+    const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
+    scene.add(light);
+
+    // Пример добавления 3D моделей на основе данных из people
+    people.forEach((p, index) => {
+        const geometry = new THREE.SphereGeometry(0.05, 16, 16);
+        const material = new THREE.MeshPhongMaterial({ color: 0xff7eb3 });
+        const sphere = new THREE.Mesh(geometry, material);
+        // Расставляем объекты вокруг (в AR координаты в метрах)
+        sphere.position.set((Math.random()-0.5), (Math.random()-0.5), -1);
+        scene.add(sphere);
+    });
+
+    document.body.appendChild(ARButton.createButton(renderer, { requiredFeatures: ['hit-test'] }));
+
+    renderer.setAnimationLoop((timestamp, frame) => {
+        renderer.render(scene, camera);
+    });
+}
+
+// Привязка кнопки после загрузки DOM
+document.addEventListener("DOMContentLoaded", () => {
+    const btn = document.getElementById('ar-button');
+    if (btn) btn.onclick = initARMode;
+});
