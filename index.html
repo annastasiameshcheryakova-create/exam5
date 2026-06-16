@@ -57,14 +57,9 @@
             <header class="glass-panel">
                 <h2 id="page-title">Аналіз Топології та GNN Схожості</h2>
                 <div class="header-actions" style="display:flex; gap:8px;">
-                    <button id="ar-button" class="btn primary" style="background: var(--accent-pink);">
-                        <i class="fas fa-vr-cardboard"></i> AR Mode
+                    <button onclick="initARMode()" class="btn primary" style="background: linear-gradient(90deg, #8e2de2, #4a00e0);">
+                        <i class="fas fa-vr-cardboard"></i> Увімкнути AR (WebXR)
                     </button>
-                    
-                    <button onclick="start3DVisualization()" class="btn primary" style="background: linear-gradient(90deg, #8e2de2, #4a00e0);">
-                        <i class="fas fa-cubes"></i> 3-D візуалізація
-                    </button>
-                    
                     <button onclick="findHub()" class="btn outline-pink">
                         <i class="fas fa-bullseye"></i> Знайти Хаб
                     </button>
@@ -84,7 +79,7 @@
                         <div class="graph-legend glass-panel">
                             <div><span class="node-dot"></span> Людина (Вершина)</div>
                             <div><span class="edge-line" style="background:var(--edge-color);"></span> Логістичний шлях (Ребро)</div>
-                            <div style="margin-top: 8px; font-size: 11px; opacity: 0.7;">Ширина ліній = Сила зв'язку</div>
+                            <div style="margin-top: 8px; font-size: 11px; opacity: 0.7;">Анімовані хвилі = Сила зв'язку</div>
                         </div>
                     </div>
                     
@@ -101,7 +96,7 @@
                         </div>
 
                         <div class="panel-section">
-                            <h4><i class="fas fa-map-marker-alt"></i> Люди поруч </h4>
+                            <h4><i class="fas fa-map-marker-alt"></i> Люди поруч (Логістика простору)</h4>
                             <div id="panel-nearby"></div>
                         </div>
 
