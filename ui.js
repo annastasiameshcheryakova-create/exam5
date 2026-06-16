@@ -644,3 +644,36 @@ function startVideoAR() {
     }
     xrRenderer.setAnimationLoop(animate);
 }
+// Функція для 3D-візуалізації на екрані
+function start3DVisualization() {
+    showToast("Запуск 3D-симуляції...");
+    // Тут має бути виклик вашої функції, яка ініціалізує 3D сцену у вікні браузера
+    // Наприклад: init3DScene();
+}
+
+// Функція для справжнього AR (WebXR)
+function startRealAR() {
+    if (!('xr' in navigator)) {
+        showToast("Ваш браузер не підтримує WebXR.");
+        return;
+    }
+
+    navigator.xr.isSessionSupported('immersive-ar').then((supported) => {
+        if (supported) {
+            // Запуск сесії WebXR з прозорим фоном
+            const sessionInit = { optionalFeatures: ['local-floor', 'hit-test', 'dom-overlay'], domOverlay: { root: document.body } };
+            navigator.xr.requestSession('immersive-ar', sessionInit).then(onSessionStarted);
+        } else {
+            showToast("AR не підтримується на цьому пристрої. Спробуйте через мобільний Chrome.");
+        }
+    }).catch(err => {
+        console.error(err);
+        showToast("Помилка при запуску AR.");
+    });
+}
+
+function onSessionStarted(session) {
+    // Тут ініціалізація вашого Three.js рендерера для AR
+    // Важливо: renderer.xr.enabled = true;
+    showToast("AR-сесія активована!");
+}
