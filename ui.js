@@ -270,58 +270,70 @@ function showToast(message) {
     toastTimeout = setTimeout(() => { toast.classList.add("hidden"); }, 3000);
 }
 
-// ui.js - Полная исправленная версия
-
+// =========================================================
+// ДОПОВНЕНА РЕАЛЬНІСТЬ (AR) З ПІДТРИМКОЮ WEBXR
+// =========================================================
 let xrScene, xrCamera, xrRenderer, xrContainer;
 let meshes = {};
-let graphGroup;
-let isAddMode = false;
-let selectedForConnection = null;
+let graphGroup; // Використовуємо групу для масштабування в AR
 
-// Инициализация при загрузке страницы
-document.addEventListener("DOMContentLoaded", () => {
-    generatePeople(25);
-    initGraph();
-    updateStats();
-    buildInterestCheckboxes();
-    
-    // Привязка кнопки AR Mode (убедитесь, что она есть в index.html)
-    const arBtn = document.getElementById('ar-button');
-    if (arBtn) arBtn.onclick = initARMode;
-
-    document.getElementById("graph-svg").addEventListener("click", () => {
-        if(!isAddMode) resetHighlights();
-    });
-});
-
-// =========================================================
-// ОСНОВНАЯ ФУНКЦИЯ ЗАПУСКА AR / 3D
-// =========================================================
 function initARMode() {
     if ('xr' in navigator) {
         navigator.xr.isSessionSupported('immersive-ar').then((supported) => {
             if (supported) {
                 startTrueWebXR();
             } else {
-                startVideoAR();
+                startVideoAR(); // Fallback для ПК / старих браузерів
             }
-        }).catch(() => startVideoAR());
+        });
     } else {
         startVideoAR();
     }
 }
 
-// 1. СПРАВЖНІЙ WEBXR (ДЛЯ ТЕЛЕФОНІВ)
+// СПРАВЖНІЙ WEBXR (ДЛЯ ТЕЛЕФОНІВ)
 function startTrueWebXR() {
     showToast("Запуск WebXR AR...");
 
     xrContainer = document.createElement("div");
     xrContainer.id = "xr-overlay";
-    Object.assign(xrContainer.style, {
-        position: "fixed", top: "0", left: "0", width: "100vw", height: "100vh",
-        zIndex: "999", pointerEvents: "none"
-    });
+    xrContainer.style.position = "fixed";
+    xrContainer.style.top = "0";
+    xrContainer.style.left = "0";
+    xrContainer.style.width = "100vw";
+    xrContainer.style.height = "100vh";
+    xrContainer.style.zIndex = "999";
+    xrContainer.style.pointerEvents = "none"; // Щоб кліки проходили до WebXR канвасу
     document.body.appendChild(xrContainer);
+
+    // Панель керування (DOM Overlay для WebXR)
+    let info = document.createElement("div");
+    info.style.position = "absolute";
+    info.style.bottom = "20px";
+    info.style.left = "20px";
+    info.style.background = "rgba(0,0,0,0.8)";
+    info.style.padding = "15px";
+    info.style.borderRadius = "10px";
+    info.style.pointerEvents = "auto";
+    info.innerHTML = `
+        <h4 style="color:var(--accent-pink)">WebXR Controller</h4>
+        <p style="margin-top:4px; font-size:12px;">Тапніть по екрану, щоб вибрати вершину</p>
+        <div style="margin-top:8px; display:flex; gap:5px; flex-wrap:wrap;">
+           <button onclick="window.toggleARAddMode()" class="btn outline-pink" id="ar-add-btn" style="padding:6px; font-size:11px;">Режим зв'язків: ВИМК</button>
+           <button id="exit-ar-btn" class="btn danger" style="padding:6px; font-size:11px;">Вийти</button>
+        </div>
+    `;
+    xrContainer.appendChild(info);
+
+    window.toggleARAddMode = function() {
+        isAddMode = !isAddMode;
+        selectedForConnection = null;
+        const btn = document.getElementById('ar-add-btn');
+        btn.style.background = isAddMode ? "var(--accent-pink)" : "transparent";
+        btn.style.color = isAddMode ? "white" : "var(--accent-pink)";
+        btn.textContent = isAddMode ? "Режим зв'язків: УВІМК" : "Режим зв'язків: ВИМК";
+        showToast(isAddMode ? "Режим зв'язків: Оберіть 2 вершини" : "Режим перегляду");
+    };
 
     xrScene = new THREE.Scene();
     xrCamera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
@@ -329,60 +341,70 @@ function startTrueWebXR() {
     xrRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     xrRenderer.setSize(window.innerWidth, window.innerHeight);
     xrRenderer.setPixelRatio(window.devicePixelRatio);
-    xrRenderer.xr.enabled = true; // КЛЮЧЕВОЙ МОМЕНТ ДЛЯ WEBXR
-    document.body.appendChild(xrRenderer.domElement);
+    xrRenderer.xr.enabled = true; // УВІМКНУТИ WEBXR
 
-    // Добавление кнопки ARButton (Three.js стандарт)
-    document.body.appendChild(ARButton.createButton(xrRenderer, { requiredFeatures: ['hit-test'] }));
+    const ambientLight = new THREE.AmbientLight(0xffffff, 1.0);
+    xrScene.add(ambientLight);
 
-    xrScene.add(new THREE.AmbientLight(0xffffff, 1.0));
     graphGroup = new THREE.Group();
+    // Ставимо граф на 1 метр перед камерою та зменшуємо масштаб для реального світу
     graphGroup.position.set(0, 0, -1.0);
     graphGroup.scale.set(0.0015, 0.0015, 0.0015);
     xrScene.add(graphGroup);
 
-    if (window.refreshAR) window.refreshAR();
+    window.refreshAR = function() {
+        while(graphGroup.children.length > 0) { 
+            graphGroup.remove(graphGroup.children[graphGroup.children.length - 1]); 
+        }
+        meshes = {};
 
-    xrRenderer.setAnimationLoop((time, frame) => {
-        xrRenderer.render(xrScene, xrCamera);
-    });
-}
+        people.forEach(p => {
+            const geometry = new THREE.SphereGeometry(18, 32, 32);
+            const material = new THREE.MeshPhongMaterial({ color: 0xff7eb3, emissive: 0x2a0815, shininess: 40 });
+            const sphere = new THREE.Mesh(geometry, material);
+            
+            sphere.position.set(p.x - 400, -(p.y - 300), p.z || 0);
+            sphere.userData = { id: p.id, name: p.name };
+            graphGroup.add(sphere);
+            meshes[p.id] = sphere;
 
-// 2. 3D-СИМУЛЯЦИЯ (FALLBACK ДЛЯ ПК)
-function startVideoAR() {
-    showToast("WebXR недоступний. Ініціалізація 3D-симуляції.");
-    
-    xrContainer = document.createElement("div");
-    Object.assign(xrContainer.style, {
-        position: "fixed", top: "0", left: "0", width: "100vw", height: "100vh",
-        zIndex: "999", overflow: "hidden", background: "#07050d"
-    });
-    document.body.appendChild(xrContainer);
+            const canvas = document.createElement('canvas');
+            canvas.width = 256; canvas.height = 64;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'Bold 24px Inter, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(p.name, 128, 40);
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    xrContainer.appendChild(renderer.domElement);
+            const texture = new THREE.CanvasTexture(canvas);
+            const spriteMat = new THREE.SpriteMaterial({ map: texture });
+            const sprite = new THREE.Sprite(spriteMat);
+            sprite.position.set(sphere.position.x, sphere.position.y + 35, sphere.position.z);
+            sprite.scale.set(70, 17, 1);
+            graphGroup.add(sprite);
+        });
 
-    const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 1, 2000);
-    camera.position.set(0, 0, 500);
+        edges.forEach(([u, v]) => {
+            const nodeA = meshes[u];
+            const nodeB = meshes[v];
+            if (nodeA && nodeB) {
+                const points = [nodeA.position, nodeB.position];
+                const lineGeo = new THREE.BufferGeometry().setFromPoints(points);
+                const shared = getSharedInterests(u, v).length;
+                const lineColor = shared > 0 ? 0xff7eb3 : 0x8e2de2;
 
-    const controls = new THREE.OrbitControls(camera, renderer.domElement);
-    scene.add(new THREE.AmbientLight(0xffffff, 0.8));
-    
-    // Вызов вашей функции отрисовки графа
-    if (window.refreshAR) {
-        window.refreshAR(); 
-        // Здесь предполагается, что refreshAR добавляет объекты в глобальный xrScene или аналогичный контейнер
-    }
-
-    function animate() {
-        if (!document.body.contains(xrContainer)) { renderer.setAnimationLoop(null); return; }
-        controls.update();
-        renderer.render(scene, camera);
-    }
-    renderer.setAnimationLoop(animate);
-}
+                const lineMat = new THREE.LineBasicMaterial({ 
+                    color: lineColor, 
+                    linewidth: 4, 
+                    transparent: true,
+                    opacity: 0.5 + (shared * 0.15)
+                });
+                const line = new THREE.Line(lineGeo, lineMat);
+                graphGroup.add(line);
+            }
+        });
+    };
+    window.refreshAR();
 
     // Контролер WebXR (Тап по екрану телефона)
     const controller = xrRenderer.xr.getController(0);
@@ -605,4 +627,20 @@ function startVideoAR() {
         }
     });
 
-  
+    // ОНОВЛЕНИЙ ЦИКЛ АНІМАЦІЇ ДЛЯ WEBXR
+    function animate() {
+        if (!document.body.contains(xrContainer)) {
+            xrRenderer.setAnimationLoop(null);
+            return;
+        }
+        
+        controls.update(); // Необхідно для OrbitControls
+        
+        xrScene.children.forEach(child => { 
+            if (child.geometry && child.geometry.type === "SphereGeometry") child.rotation.y += 0.01; 
+        });
+        
+        xrRenderer.render(xrScene, xrCamera);
+    }
+    xrRenderer.setAnimationLoop(animate);
+}
