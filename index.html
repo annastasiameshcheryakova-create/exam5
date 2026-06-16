@@ -7,7 +7,11 @@
     <link rel="stylesheet" href="styles.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/webxr/ARButton.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/webxr/VRButton.js"></script>
+    
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css" rel="stylesheet">
 </head>
 <body>
@@ -51,13 +55,10 @@
         
         <div class="main-content">
             <header class="glass-panel">
-                <h2 id="page-title">Аналіз Топології та GNN Схожості</h2>
+                <h2 id="page-title">Аналіз Топологии та GNN Схожості</h2>
                 <div class="header-actions" style="display:flex; gap:8px;">
-                    <button id="toggle-3d-btn" onclick="toggle3DMode()" class="btn secondary">
-                        <i class="fas fa-cubes"></i> 3D Режим
-                    </button>
-                    <button id="start-xr-btn" onclick="startXRSession()" class="btn primary" style="background: linear-gradient(90deg, #ff007f, #7928ca);">
-                        <i class="fas fa-vr-cardboard"></i> Запустити WebXR AR
+                    <button id="start-ar-btn" onclick="initARMode()" class="btn primary" style="background: linear-gradient(90deg, #ff007f, #7928ca);">
+                        <i class="fas fa-vr-cardboard"></i> Увімкнути AR (WebXR)
                     </button>
                     <button onclick="findHub()" class="btn outline-pink">
                         <i class="fas fa-bullseye"></i> Знайти Хаб
@@ -75,12 +76,11 @@
                 <div class="graph-wrapper">
                     <div class="graph-container glass-panel">
                         <svg id="graph-svg" width="100%" height="100%"></svg>
-                        
-                        <div id="graph-3d-container" class="hidden" style="width: 100%; height: 100%; position: absolute; top:0; left:0;"></div>
 
                         <div class="graph-legend glass-panel">
                             <div><span class="node-dot"></span> Людина (Вершина)</div>
                             <div><span class="edge-line" style="background:var(--edge-color);"></span> Логістичний шлях (Ребро)</div>
+                            <div style="margin-top: 8px; font-size: 11px; opacity: 0.7;">Анімовані хвилі = Сила зв'язку</div>
                         </div>
                     </div>
                     
@@ -97,7 +97,7 @@
                         </div>
 
                         <div class="panel-section">
-                            <h4>📍 Люди поруч</h4>
+                            <h4><i class="fas fa-map-marker-alt"></i> Люди поруч</h4>
                             <div id="panel-nearby"></div>
                         </div>
 
@@ -121,7 +121,7 @@
             
             <div id="tab-2" class="tab-content">
                 <h2>Машинне навчання: Graph Convolutional Network (GCN)</h2>
-                <p class="subtitle" style="color:var(--text-muted)">Рекомендації сформовані Message Passing алгоритмами.</p>
+                <p class="subtitle" style="color:var(--text-muted)">Рекомендації сформовані проходом графа через шари Message Passing.</p>
                 <div id="recommendations-list" class="recommendations-list mt-4"></div>
             </div>
             
@@ -142,12 +142,6 @@
         </div>
     </div>
     
-    <div id="xr-overlay" class="hidden" style="position:fixed; top:0; left:0; width:100%; height:100%; pointer-events:none; z-index:10000;">
-        <button id="exit-xr-btn" class="btn danger" style="position:absolute; top:20px; right:20px; pointer-events:auto; padding:12px 24px; box-shadow:0 4px 20px rgba(0,0,0,0.5);">
-            <i class="fas fa-times"></i> Вийти з AR
-        </button>
-    </div>
-
     <div id="toast" class="toast glass-panel hidden"></div>
 
     <script src="data.js"></script>
