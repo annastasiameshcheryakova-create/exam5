@@ -23,9 +23,9 @@
             </div>
             
             <nav class="menu">
-                <a href="#" onclick="switchTab(0)" class="active"><i class="fas fa-network-wired"></i> Граф мережі</a>
+                <a href="#" onclick="switchTab(0)" class="active"><i class="fas fa-network-wired"></i>Зв'язки</a>
                 <a href="#" onclick="switchTab(1)"><i class="fas fa-users"></i> Профілі</a>
-                <a href="#" onclick="switchTab(2)"><i class="fas fa-brain"></i> GNN Рекомендації</a>
+                <a href="#" onclick="switchTab(2)"><i class="fas fa-brain"></i>Рекомендації</a>
                 <a href="#" onclick="switchTab(3)"><i class="fas fa-hashtag"></i> Хмара інтересів</a>
             </nav>
 
@@ -34,7 +34,7 @@
                 <input type="text" id="new-user-name" placeholder="Ім'я прізвище..." style="width:100%; padding:6px; background:rgba(0,0,0,0.3); border:1px solid var(--glass-border); color:white; border-radius:4px; font-size:12px; outline:none; margin-bottom:6px;">
                 <div style="font-size:11px; color:var(--text-muted); margin-bottom:4px;">Оберіть інтереси:</div>
                 <div id="interests-selector" style="max-height: 110px; overflow-y: auto; background: rgba(0,0,0,0.2); padding: 4px; border-radius: 4px; margin-bottom:8px;"></div>
-                <button onclick="createNewUser()" class="btn primary full-width" style="padding: 6px; font-size:12px;">Аналізувати GNN й додати</button>
+                <button onclick="createNewUser()" class="btn primary full-width" style="padding: 6px; font-size:12px;">Аналізувати й додати</button>
             </div>
             
             <div class="stats">
@@ -78,8 +78,8 @@
                         <svg id="graph-svg" width="100%" height="100%"></svg>
                         <div class="graph-legend glass-panel">
                             <div><span class="node-dot"></span> Людина (Вершина)</div>
-                            <div><span class="edge-line" style="background:var(--edge-color);"></span> Логістичний шлях (Ребро)</div>
-                            <div style="margin-top: 8px; font-size: 11px; opacity: 0.7;">Анімовані хвилі = Сила зв'язку</div>
+                            <div><span class="edge-line" style="background:var(--edge-color);"></span> Дружні зв'язки (Ребро)</div>
+                            <div style="margin-top: 8px; font-size: 11px; opacity: 0.7;">Товщина ребра = Сила зв'язку</div>
                         </div>
                     </div>
                     
@@ -96,18 +96,18 @@
                         </div>
 
                         <div class="panel-section">
-                            <h4><i class="fas fa-map-marker-alt"></i> Люди поруч (Логістика простору)</h4>
+                            <h4><i class="fas fa-map-marker-alt"></i> Люди поруч</h4>
                             <div id="panel-nearby"></div>
                         </div>
 
                         <div class="panel-section">
-                            <h4>Рекомендація Graph Neural Network</h4>
+                            <h4>Рекомендації</h4>
                             <div id="panel-recommendation" class="rec-mini-card"></div>
                         </div>
                         
                         <div class="actions">
                             <button onclick="highlightSimilarNodes()" class="btn primary full-width">
-                                <i class="fas fa-magic"></i> Знайти схожих за GCN
+                                <i class="fas fa-magic"></i> Знайти схожих . . .
                             </button>
                         </div>
                     </div>
@@ -119,8 +119,8 @@
             </div>
             
             <div id="tab-2" class="tab-content">
-                <h2>Машинне навчання: Graph Convolutional Network (GCN)</h2>
-                <p class="subtitle" style="color:var(--text-muted)">Рекомендації сформовані проходом графа через згорткові нейронні шари Message Passing (ReLU(D⁻¹/²ÂD⁻¹/² X W)) для отримання Node Embeddings.</p>
+                <h2></h2>
+                <p class="subtitle" style="color:var(--text-muted)"></p>
                 <div id="recommendations-list" class="recommendations-list mt-4"></div>
             </div>
             
