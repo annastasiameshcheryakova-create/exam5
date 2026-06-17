@@ -433,163 +433,143 @@ function start3DMode() {
     xrRenderer.setAnimationLoop(animate);
 }
 // =========================================================
-// WebXR (VR) ВІЗУАЛІЗАЦІЯ
+// ДОДАТКОВИЙ AR РЕЖИМ (WebXR)
 // =========================================================
-let vrController1, vrController2;
+function startARMode() {
+    if (!('xr' in navigator)) {
+        showToast("Ваш пристрій або браузер не підтримує WebXR.");
+        return;
+    }
 
-function initWebXRMode() {
-    showToast("Ініціалізація WebXR. Одягніть шлем!");
+    showToast("Ініціалізація AR-простору...");
 
-    // Контейнер на весь екран
-    xrContainer = document.createElement("div");
-    xrContainer.style.position = "fixed";
-    xrContainer.style.top = "0"; xrContainer.style.left = "0";
-    xrContainer.style.width = "100vw"; xrContainer.style.height = "100vh";
-    xrContainer.style.zIndex = "999";
-    xrContainer.style.background = "#0a0812";
-    document.body.appendChild(xrContainer);
+    let arContainer = document.createElement("div");
+    arContainer.style.position = "fixed";
+    arContainer.style.top = "0";
+    arContainer.style.left = "0";
+    arContainer.style.width = "100vw";
+    arContainer.style.height = "100vh";
+    arContainer.style.zIndex = "999";
+    // Фон залишаємо прозорим, щоб бачити зображення з камери
+    document.body.appendChild(arContainer);
 
+    let arScene = new THREE.Scene();
+    let arCamera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
+
+    let arRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    arRenderer.setSize(window.innerWidth, window.innerHeight);
+    arRenderer.setClearColor(0x000000, 0); // Важливо для AR
+    arRenderer.xr.enabled = true;
+    arContainer.appendChild(arRenderer.domElement);
+
+    // Додаємо кнопку старту сесії знизу екрану
+    let arBtn = ARButton.createButton(arRenderer, { requiredFeatures: ['hit-test'] });
+    arBtn.style.zIndex = "1000";
+    arContainer.appendChild(arBtn);
+
+    // Кнопка примусового виходу з AR та закриття інтерфейсу
     let closeBtn = document.createElement("button");
-    closeBtn.innerHTML = '<i class="fas fa-times"></i> Закрити WebXR';
+    closeBtn.innerHTML = '<i class="fas fa-times"></i> Закрити AR UI';
     closeBtn.className = "btn danger";
-    closeBtn.style.position = "absolute"; 
-    closeBtn.style.top = "20px"; closeBtn.style.right = "20px";
-    closeBtn.style.zIndex = "1000";
-    closeBtn.onclick = () => { 
-        if(xrRenderer) xrRenderer.setAnimationLoop(null);
-        xrContainer.remove(); 
+    closeBtn.style.position = "absolute";
+    closeBtn.style.top = "20px";
+    closeBtn.style.right = "20px";
+    closeBtn.style.zIndex = "1001";
+    closeBtn.onclick = () => {
+        arRenderer.xr.getSession()?.end();
+        arContainer.remove();
+        document.body.removeChild(arBtn);
     };
-    xrContainer.appendChild(closeBtn);
+    arContainer.appendChild(closeBtn);
 
-    // Ініціалізація сцени
-    xrScene = new THREE.Scene();
-    xrCamera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 100);
-    
-    // Рендерер з підтримкою XR
-    xrRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    xrRenderer.setSize(window.innerWidth, window.innerHeight);
-    xrRenderer.xr.enabled = true; // ВАЖЛИВО ДЛЯ WEBXR
-    xrContainer.appendChild(xrRenderer.domElement);
+    arScene.add(new THREE.AmbientLight(0xffffff, 1.2));
 
-    // Додаємо кнопку "Enter VR" поверх контейнера
-    const vrButton = VRButton.createButton(xrRenderer);
-    vrButton.style.zIndex = "1000";
-    vrButton.style.position = "absolute";
-    xrContainer.appendChild(vrButton);
+    // Створюємо групу графа і сильно зменшуємо її для масштабів кімнати
+    // Коефіцієнт 0.002 перетворює 500 одиниць на 1 метр
+    let graphGroup = new THREE.Group();
+    graphGroup.scale.set(0.002, 0.002, 0.002);
+    graphGroup.position.set(0, 0, -1.5); // Розміщуємо на 1.5 метра перед користувачем
+    arScene.add(graphGroup);
 
-    // Створюємо групу для графа, щоб масштабувати його до розмірів кімнати (1 од. = 1 метр)
-    graphGroup = new THREE.Group();
-    graphGroup.scale.set(0.005, 0.005, 0.005); // Зменшуємо у 200 разів
-    graphGroup.position.set(0, 1.5, -3); // Ставимо на висоті 1.5м та на 3 метри вперед від камери
-    xrScene.add(graphGroup);
+    let arMeshes = {};
 
-    // Світло
-    xrScene.add(new THREE.AmbientLight(0xffffff, 0.8));
-    const pointLight = new THREE.PointLight(0xff7eb3, 1.5, 100);
-    pointLight.position.set(0, 5, 5);
-    xrScene.add(pointLight);
+    // Генерація вершин
+    people.forEach(p => {
+        const sphere = new THREE.Mesh(
+            new THREE.SphereGeometry(14, 32, 32),
+            new THREE.MeshPhongMaterial({ color: 0xff7eb3, emissive: 0x2a0815, shininess: 40 })
+        );
+        sphere.position.set(p.x - 400, -(p.y - 300), p.z || 0);
+        sphere.userData = { id: p.id, name: p.name };
+        graphGroup.add(sphere);
+        arMeshes[p.id] = sphere;
+    });
 
-    // Функція генерації 3D об'єктів (адаптована для VR)
-    window.refreshVR = function() {
-        // Очищаємо групу перед оновленням
-        while(graphGroup.children.length > 0){ graphGroup.remove(graphGroup.children[0]); }
-        meshes = {};
-
-        people.forEach(p => {
-            const sphere = new THREE.Mesh(
-                new THREE.SphereGeometry(14, 32, 32), 
-                new THREE.MeshPhongMaterial({ color: 0xff7eb3, emissive: 0x2a0815, shininess: 40 })
+    // Генерація зв'язків
+    edges.forEach(([u, v]) => {
+        if (arMeshes[u] && arMeshes[v]) {
+            const line = new THREE.Line(
+                new THREE.BufferGeometry().setFromPoints([arMeshes[u].position, arMeshes[v].position]),
+                new THREE.LineBasicMaterial({ 
+                    color: getSharedInterests(u, v).length > 0 ? 0xff7eb3 : 0x8e2de2, 
+                    linewidth: 2, 
+                    transparent: true, 
+                    opacity: 0.8 
+                })
             );
-            // Центруємо координати відносно 0,0,0
-            sphere.position.set(p.x - 400, -(p.y - 300), p.z || 0);
-            sphere.userData = { id: p.id, name: p.name };
-            graphGroup.add(sphere);
-            meshes[p.id] = sphere;
-        });
+            graphGroup.add(line);
+        }
+    });
 
-        edges.forEach(([u, v]) => {
-            if (meshes[u] && meshes[v]) {
-                const line = new THREE.Line(
-                    new THREE.BufferGeometry().setFromPoints([meshes[u].position, meshes[v].position]), 
-                    new THREE.LineBasicMaterial({ color: getSharedInterests(u, v).length > 0 ? 0xff7eb3 : 0x8e2de2, linewidth: 2, transparent: true, opacity: 0.6 })
-                );
-                graphGroup.add(line);
-            }
-        });
-    };
-    window.refreshVR();
+    // Взаємодія (тапи по екрану телефону)
+    let controller = arRenderer.xr.getController(0);
+    controller.addEventListener('select', () => {
+        const tempMatrix = new THREE.Matrix4();
+        tempMatrix.identity().extractRotation(controller.matrixWorld);
 
-    // === ВЗАЄМОДІЯ ЧЕРЕЗ VR КОНТРОЛЕРИ ===
-    function onSelectStart(event) {
-        const controller = event.target;
-        const intersections = getIntersections(controller);
+        const raycaster = new THREE.Raycaster();
+        raycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
+        raycaster.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix);
 
-        if (intersections.length > 0) {
-            const clickedSphere = intersections[0].object;
-            const pId = clickedSphere.userData.id;
+        const intersects = raycaster.intersectObjects(graphGroup.children);
+        const clickedSphere = intersects.find(i => i.object.geometry && i.object.geometry.type === "SphereGeometry");
+
+        if (clickedSphere) {
+            const pId = clickedSphere.object.userData.id;
             
-            if (pId !== undefined) {
-                // Анімація кліку
-                clickedSphere.material.color.setHex(0x8e2de2);
-                setTimeout(() => clickedSphere.material.color.setHex(0xff7eb3), 1000);
-                
-                // В VR важко вводити текст, тому просто показуємо консоль/логіку
-                console.log("VR Click:", clickedSphere.userData.name);
-                
-                // Якщо є режим додавання друзів
-                if (isAddMode) {
-                    if (!selectedForConnection) {
-                        selectedForConnection = people.find(p => p.id === pId);
-                        clickedSphere.material.color.setHex(0xffffff);
-                    } else {
-                        if (selectedForConnection.id !== pId) {
-                            addEdge(selectedForConnection.id, pId);
-                            window.refreshVR(); updateGraphElements();
-                        }
-                        selectedForConnection = null;
+            // Анімація виділення
+            clickedSphere.object.material.color.setHex(0x8e2de2);
+            setTimeout(() => clickedSphere.object.material.color.setHex(0xff7eb3), 1000);
+            
+            // Логіка додавання зв'язків аналогічна до 3D режиму
+            if (isAddMode) {
+                if (!selectedForConnection) {
+                    selectedForConnection = people.find(p => p.id === pId);
+                    clickedSphere.object.material.color.setHex(0xffffff);
+                } else {
+                    if (selectedForConnection.id !== pId) {
+                        const added = addEdge(selectedForConnection.id, pId);
+                        if (!added) removeEdge(selectedForConnection.id, pId);
+                        updateGraphElements();
                     }
+                    selectedForConnection = null;
                 }
             }
         }
-    }
+    });
+    arScene.add(controller);
 
-    // Налаштування променів з контролерів
-    vrController1 = xrRenderer.xr.getController(0);
-    vrController1.addEventListener('selectstart', onSelectStart);
-    xrScene.add(vrController1);
-
-    vrController2 = xrRenderer.xr.getController(1);
-    vrController2.addEventListener('selectstart', onSelectStart);
-    xrScene.add(vrController2);
-
-    const raycaster = new THREE.Raycaster();
-    const tempMatrix = new THREE.Matrix4();
-
-    function getIntersections(controller) {
-        tempMatrix.identity().extractRotation(controller.matrixWorld);
-        raycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
-        raycaster.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix);
-        return raycaster.intersectObjects(graphGroup.children, false);
-    }
-
-    // Візуальні лінії для контролерів
-    const geometry = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, -5)]);
-    const line = new THREE.Line(geometry, new THREE.LineBasicMaterial({ color: 0xffffff, opacity: 0.5, transparent: true }));
-    vrController1.add(line.clone());
-    vrController2.add(line.clone());
-
-    // Головний цикл анімації
-    xrRenderer.setAnimationLoop(() => {
-        if (!document.body.contains(xrContainer)) {
-            xrRenderer.setAnimationLoop(null);
+    arRenderer.setAnimationLoop(() => {
+        if (!document.body.contains(arContainer)) {
+            arRenderer.setAnimationLoop(null);
             return;
         }
         
-        // Обертання сфер для краси
+        // Повільне обертання вершин
         graphGroup.children.forEach(child => { 
             if (child.geometry && child.geometry.type === "SphereGeometry") child.rotation.y += 0.01; 
         });
-
-        xrRenderer.render(xrScene, xrCamera);
+        
+        arRenderer.render(arScene, arCamera);
     });
 }
