@@ -1,104 +1,157 @@
 // xr.js
-async function initXRMode() { // Перейменовано функцію для загального XR
-    // Контейнер для UI
+async function initARMode() {
+    // Перевірка підтримки WebXR
+    if (!navigator.xr) {
+        alert("Ваш браузер або пристрій не підтримує WebXR.");
+        return;
+    }
+
+    // Створюємо контейнер для 3D/XR сцени, щоб він перекривав основний сайт
+    const xrContainer = document.createElement('div');
+    xrContainer.style.position = 'fixed';
+    xrContainer.style.top = '0';
+    xrContainer.style.left = '0';
+    xrContainer.style.width = '100vw';
+    xrContainer.style.height = '100vh';
+    xrContainer.style.zIndex = '9998';
+    xrContainer.style.background = '#0a0812'; // Темний фон для VR
+    document.body.appendChild(xrContainer);
+
+    // Контейнер для кнопок AR / VR
     const uiContainer = document.createElement('div');
-    uiContainer.id = 'webxr-ui-container';
-    // Налаштування контейнера для розміщення внизу праворуч
-    uiContainer.style.position = 'absolute';
-    uiContainer.style.bottom = '20px';
-    uiContainer.style.right = '20px';
+    uiContainer.style.position = 'fixed';
+    uiContainer.style.bottom = '30px';
+    uiContainer.style.left = '50%';
+    uiContainer.style.transform = 'translateX(-50%)';
     uiContainer.style.display = 'flex';
-    uiContainer.style.gap = '10px';
-    uiContainer.style.zIndex = '1000';
+    uiContainer.style.gap = '12px';
+    uiContainer.style.zIndex = '9999';
     document.body.appendChild(uiContainer);
 
-    const scene = new THREE.Scene();
-    // Використовуємо існуючі параметри камери, але з меншим zoom
-    const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
-
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    renderer.setPixelRatio(window.devicePixelRatio);
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.xr.enabled = true; // Активуємо WebXR
-    
-    // Контейнер для рендерера, щоб він не конфліктував із UI
-    const xrRendererContainer = document.createElement('div');
-    xrRendererContainer.id = 'xr-renderer-container';
-    document.body.appendChild(xrRendererContainer);
-    xrRendererContainer.appendChild(renderer.domElement);
-
-    // Додаємо стилі для кнопок WebXR
+    // Стилі для кнопок (як на скріншоті)
     const style = document.createElement('style');
     style.innerHTML = `
         .webxr-btn {
-            padding: 8px 16px;
+            padding: 8px 18px;
             border-radius: 8px;
             font-family: 'Inter', sans-serif;
-            font-weight: 500;
-            font-size: 14px;
+            font-weight: 700;
+            font-size: 16px;
             cursor: pointer;
-            transition: all 0.3s;
+            transition: all 0.2s;
             display: inline-flex;
             align-items: center;
             justify-content: center;
+            min-width: 70px;
         }
-
         .webxr-btn.ar {
             background: transparent;
-            border: 2px solid rgba(142, 45, 226, 0.4);
-            color: #e0d4fc;
+            border: 2px solid #ffffff;
+            color: #ffffff;
         }
-        
         .webxr-btn.vr {
-            background: white;
-            border: none;
-            color: #0a0812;
+            background: #ffffff;
+            border: 2px solid #ffffff;
+            color: #8bbfa3; /* Колір тексту підлаштований під фон з картинки */
         }
-
-        .webxr-btn:hover {
-            opacity: 0.8;
-            transform: scale(1.05);
+        .webxr-btn:active { transform: scale(0.95); }
+        .close-xr {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 10000;
         }
     `;
     document.head.appendChild(style);
 
-    // Перевірити підтримку AR та додати кнопку, якщо підтримується
-    const arSupported = await renderer.xr.isSessionSupported('immersive-ar');
+    // Кнопка виходу
+    const closeBtn = document.createElement("button");
+    closeBtn.innerHTML = '<i class="fas fa-times"></i> Закрити';
+    closeBtn.className = "btn danger close-xr";
+    closeBtn.onclick = () => {
+        renderer.setAnimationLoop(null);
+        xrContainer.remove();
+        uiContainer.remove();
+        closeBtn.remove();
+    };
+    document.body.appendChild(closeBtn);
+
+    // Ініціалізація Three.js
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 1000);
+    
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.xr.enabled = true; // Важливо для WebXR
+    xrContainer.appendChild(renderer.domElement);
+
+    // Освітлення
+    scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+    const pointLight = new THREE.PointLight(0xff7eb3, 1.2, 1000);
+    pointLight.position.set(0, 5, 5);
+    scene.add(pointLight);
+
+    // Група для графа
+    const graphGroup = new THREE.Group();
+    graphGroup.position.set(0, 0, -1); // 1 метр перед користувачем
+    graphGroup.scale.set(0.005, 0.005, 0.005);
+    scene.add(graphGroup);
+
+    // Додаємо тестову сферу, щоб було видно, що сцена працює (заміни на свої вузли/ребра)
+    const testSphere = new THREE.Mesh(
+        new THREE.SphereGeometry(20, 32, 32),
+        new THREE.MeshPhongMaterial({ color: 0xff7eb3 })
+    );
+    graphGroup.add(testSphere);
+
+    // --- Перевірка підтримки та створення кнопок ---
+    
+    // AR Кнопка
+    const arSupported = await navigator.xr.isSessionSupported('immersive-ar');
     if (arSupported) {
         const arButton = document.createElement('button');
         arButton.textContent = 'AR';
-        arButton.classList.add('webxr-btn', 'ar'); // Додаємо класи для стилізації
+        arButton.className = 'webxr-btn ar';
         uiContainer.appendChild(arButton);
+        
         arButton.onclick = async () => {
-            const sessionInit = { requiredFeatures: ['hit-test'] };
-            const session = await renderer.xr.requestSession('immersive-ar', sessionInit);
-            renderer.xr.setSession(session);
+            try {
+                const session = await navigator.xr.requestSession('immersive-ar', { requiredFeatures: ['hit-test'] });
+                renderer.xr.setSession(session);
+                xrContainer.style.background = 'transparent'; // Прозорий фон для AR
+            } catch (e) {
+                alert("Помилка запуску AR: " + e.message);
+            }
         };
     }
 
-    // Перевірити підтримку VR та додати кнопку, якщо підтримується
-    const vrSupported = await renderer.xr.isSessionSupported('immersive-vr');
+    // VR Кнопка
+    const vrSupported = await navigator.xr.isSessionSupported('immersive-vr');
     if (vrSupported) {
         const vrButton = document.createElement('button');
         vrButton.textContent = 'VR';
-        vrButton.classList.add('webxr-btn', 'vr'); // Додаємо класи для стилізації
+        vrButton.className = 'webxr-btn vr';
         uiContainer.appendChild(vrButton);
+        
         vrButton.onclick = async () => {
-            const session = await renderer.xr.requestSession('immersive-vr');
-            renderer.xr.setSession(session);
+            try {
+                const session = await navigator.xr.requestSession('immersive-vr');
+                renderer.xr.setSession(session);
+                xrContainer.style.background = '#0a0812'; // Темний фон для VR
+            } catch (e) {
+                alert("Помилка запуску VR: " + e.message);
+            }
         };
     }
 
-    // Група для графа (зменшуємо масштаб, щоб граф не був величезним)
-    const graphGroup = new THREE.Group();
-    graphGroup.position.set(0, 0, -0.5); // 0.5 метра перед користувачем
-    graphGroup.scale.set(0.001, 0.001, 0.001);
-    scene.add(graphGroup);
+    if (!arSupported && !vrSupported) {
+        uiContainer.innerHTML = '<span style="color:var(--text-muted); background:var(--glass-bg); padding:8px; border-radius:8px;">Ваш пристрій не підтримує AR/VR</span>';
+    }
 
-    // Додайте тут логіку додавання ваших вузлів (people) та ребер (edges)
-    // у graphGroup, аналогічно вашій функції start3DMode
-
-    renderer.setAnimationLoop((timestamp, frame) => {
+    // Головний цикл рендеру
+    renderer.setAnimationLoop(() => {
+        testSphere.rotation.y += 0.01; // Обертання тестової сфери
         renderer.render(scene, camera);
     });
 }
